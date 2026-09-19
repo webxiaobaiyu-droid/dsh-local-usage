@@ -167,6 +167,8 @@ Two consequences follow:
 
 `tsc` is invoked through the repo's own script rather than `tsc -b`: this package is out of the harness's project-reference graph, so it compiles against the checkout's built declaration files instead of its project graph.
 
+Both halves export **named members only** — never `export default apply`. A module with a default export is mounted by that default, so the plugin arrives without the module's `name` and `inject`: the fiber activates with an empty inject list, the entry dies on its first service read with `cannot get property "…" without inject`, and the panel then has no route to read from. `tests/module-shape.host.spec.ts` guards both halves against it.
+
 </details>
 
 **Runtime invariant:** The Host half owns one HTTP route that serves the folded report and one in-memory sample cache keyed by session id; the browser half registers one localized sidebar entry and the matching `main` panel, and reaches the Host only over that route. No companion is published, and neither half emits a Cordis event of its own.

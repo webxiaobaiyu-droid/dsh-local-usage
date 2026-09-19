@@ -167,6 +167,8 @@ Host 半边与浏览器半边都会在相同的 key 上合并 Cordis `Context`�
 
 这里用仓库自己的脚本调用 `tsc`，而不是 `tsc -b`：本包不在 Harness 的 project reference 图内，因此它针对检出的已构建声明文件编译，而非针对该工程图。
 
+两半都**只导出具名成员**，绝不写 `export default apply`。带 default 导出的模块会以该 default 被挂载，于是插件拿不到模块的 `name` 与 `inject`：fiber 以空 inject 列表激活，entry 在第一次读取服务时即以 `cannot get property "…" without inject` 失败，面板随之没有可读取的路由。`tests/module-shape.host.spec.ts` 为两半守着这条规则。
+
 </details>
 
 **Runtime invariant:** Host 半边拥有一个提供折叠报告的 HTTP 路由，以及一个以会话 id 为键的内存样本缓存；浏览器半边注册一个本地化的侧栏条目及其对应的 `main` 面板，并且只通过该路由访问 Host。不发布 companion，两半都不自行发出 Cordis 事件。

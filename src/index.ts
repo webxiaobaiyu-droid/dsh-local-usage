@@ -299,6 +299,13 @@ function connectionOf(ctx: Context): UsageInsightsConnection {
 
 /**
  * Register the report route.
+ *
+ * Deliberately a named export with no default: the Loader takes a module's
+ * default export when it has one, and a default that is the bare `apply`
+ * function is a plugin *without* this module's `name` and `inject` — the fiber
+ * then activates with an empty inject list and the first service read throws
+ * "cannot get property … without inject".
+ *
  * @param ctx - Host context carrying the carrier and the session query engine.
  * @param config - plugin configuration; omitted fields keep their defaults.
  */
@@ -319,5 +326,3 @@ export function apply(ctx: Context, config: UsageInsightsConfig = DEFAULT_CONFIG
     'dsh-local-usage: report route',
   )
 }
-
-export default apply
