@@ -13,9 +13,19 @@ English | [中文](README.zh.md)
 
 It is deliberately not a Settings page: a year of days needs the main column's width to fit without horizontal scrolling, and what a profile has spent is not a preference.
 
+What the panel gives you, in one place:
+
+- **A rolling-year calendar** of daily spend — 52 weeks ending with the current one, shaded by a quantile ramp over the window's active days, with a hover card per day.
+- **Five ranges** — today, last 7 days, this month, this quarter, this year — every one of them ending today.
+- **Totals for the range** — cost, total tokens, the uncached-input, output, cache-read and cache-write buckets, billed calls, and contributing sessions.
+- **A rate card you configure** — per-model input, cache-read, cache-write and output prices, a fallback rate, and a Beijing-time peak schedule with a multiplier.
+- **A stated basis** — the formula, the rates actually in effect, and the provenance of every figure, on the page itself rather than in documentation only.
+- **No network egress** — the fold runs inside the dsh process over durable session logs; nothing is uploaded and no external request is made.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
+- [Troubleshooting](#troubleshooting)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
@@ -42,9 +52,11 @@ The plugin manager behind **Plugins → Add plugin** takes the same two forms.
 
 This package ships its built `lib/` and its `cordis.patch.yml` in the repository, and declares no build script, so an install never runs code on your machine and never asks for the build permission a git dependency would otherwise need: what loads is exactly the committed artifact. `dsh plugin add` appends `dsh-local-usage` to the profile's bundle list, and `dsh --profile <name> --dump-config` shows the single `local-usage` row it contributes. One row mounts both halves: it loads the Host half, and because the manifest declares `dsh.client.platform: web`, that same row is what makes the browser load the panel.
 
+A profile's bundle list is composed when its process boots. Installing through **Plugins → Add plugin** applies to the running process; installing from the command line while a dsh process already serves that profile needs that process restarted before the entry appears.
+
 ### Reading the page
 
-Select **Usage** in the sidebar to open the panel. It is a global panel, so it belongs to the profile rather than to one Session and stays available while you switch conversations.
+The panel is global, so it belongs to the profile rather than to one Session, and it stays available while you switch conversations.
 
 The range selector chooses the lens: **Today**, **Last 7 days**, **This month**, **This quarter**, or **This year**. Every range ends with today, so "this month" means the month so far rather than a completed calendar month.
 
@@ -81,6 +93,26 @@ One sample is produced per **billed settlement**, using the same semantics as th
 
 -----
 
+<a id="troubleshooting"></a>
+## Troubleshooting
+
+**The panel opens but reports it cannot read usage data.** The browser half is mounted and the Host half is not, so the route it calls does not exist. The boot output names the cause:
+
+```
+dsh: warning: 1 entry did not activate
+local-usage (dsh-local-usage): Error: cannot get property "connection" without inject
+```
+
+That message means the entry reached the Loader without its `inject` list and died on its first service read; the [Dev Note](#development) covers the one module shape that causes it, and `tests/module-shape.host.spec.ts` guards against it. To confirm a healthy install instead, ask the composed configuration for the row: `dsh --profile <name> --dump-config` prints `# == dsh-local-usage` above `- id: local-usage`.
+
+**The plugin is missing from the plugin list, or the install is refused with `declares no dsh.bundle`.** A package is only installable as a plugin layer when its manifest carries `dsh.bundle.patch` and ships the patch file it names; both are committed here, so a refusal means an older copy of this package was installed — install from this repository again.
+
+**The install fails with `ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF`.** That is the profile's own state rather than this package: its `node_modules` was created by a different pnpm version or linker setting than the one now installing. Run `pnpm install` in the profile directory, then add the plugin again.
+
+**The totals look lower than the provider's invoice.** Three things are excluded by design and counted in the panel's provenance block rather than silently dropped: a fork's inherited prefix, which was billed under its parent; a settlement still streaming, whose usage is not final; and any log that could not be read. Routes that matched no rate card are priced at the fallback rate and named in the warning line.
+
+-----
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
@@ -92,17 +124,19 @@ A forked session's log begins with its parent's inherited prefix and those turns
 
 ### The page
 
-The browser half contributes a global panel: one `sidebar.panellist` entry sharing its id with one `main` keyed-slot occupant, so the sidebar owns the button and the frame owns the column. Because a global panel is retained rather than remounted, the panel reads `usePanelInfo` and only reads logs while it is the selected one. It reaches the Host only through the generated `usageInsights` Remote namespace, so this half holds no fold logic and no pricing. There is no charting library in this product and adding one is out of bounds, so the calendar is a CSS grid of cells shaded with `color-mix` over a semantic theme token.
+The browser half contributes a global panel: one `sidebar.panellist` entry sharing its id with one `main` keyed-slot occupant, so the sidebar owns the button and the frame owns the column. Because a global panel is retained rather than remounted, the panel reads `usePanelInfo` and only reads logs while it is the selected one. It reaches the Host over the one Fetch route the Host half registers, so this half holds no fold logic and no pricing — and the package needs no place in the product's Remote assembly. There is no charting library in this product and adding one is out of bounds, so the calendar is a CSS grid of cells shaded with `color-mix` over a semantic theme token.
 
 -----
 
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Session query](../../session-query/session-query/README.md) — the cold-read engine the Host half enumerates and reads through.
-- [Token meter](../../llm/token-meter/README.md) — the durable `tokenUsage` projection whose settlement and retry semantics this package's extractor mirrors.
-- [Session projection cache](../../session/session-projection-cache/README.md) — the durable per-session projection store, the zero-I/O alternative to reading logs.
-- [Adding a Remote API](../../../docs/cookbook/adding-a-remote-api.md) — the five steps this package's Host namespace follows.
+The subsystems below are DeepSeek Harness packages this one reads from, mirrors, or installs through. Each link points into the harness repository, because this package ships standalone and no longer sits inside that tree.
+
+- [Session query](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/session-query/session-query/README.md) — the cold-read engine the Host half enumerates and reads through.
+- [Token meter](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/llm/token-meter/README.md) — the durable `tokenUsage` projection whose settlement and retry semantics this package's extractor mirrors.
+- [Session projection cache](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/session/session-projection-cache/README.md) — the durable per-session projection store, the zero-I/O alternative to reading logs.
+- [Package and install a plugin](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md) — the bundle and profile model this package installs through.
 
 <a id="model-experience"></a>
 ## Model Experience

@@ -13,9 +13,19 @@ kind: "package-reference"
 
 它刻意不做成设置页：一整年的格子需要主列的宽度才不必横向滚动，而且一个 profile 花了多少钱并不是一项偏好设置。
 
+一个面板给出：
+
+- **滚动一年的日历** —— 以当前周结束的 52 周，按窗口内活跃日的分位数梯度着色，每天悬停都有明细卡片。
+- **五档区间** —— 当天、近 7 天、本月、本季度、全年，全部以今天为终点。
+- **区间总量** —— 金额、总 token、非缓存输入 / 输出 / 缓存读 / 缓存写四个桶、计费调用次数、以及贡献用量的会话数。
+- **可配置的价目表** —— 按模型的输入、缓存读、缓存写、输出单价，回退费率，以及北京时间高峰时段与倍率。
+- **自述依据** —— 计价公式、实际生效的费率、以及每个数字的来源，写在页面本身，而不是只写在文档里。
+- **不出网** —— 折叠在 dsh 进程内基于持久会话日志完成，不上传任何数据，也不发起外部请求。
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
+- [Troubleshooting](#troubleshooting)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
@@ -42,7 +52,7 @@ dsh plugin add /path/to/dsh-local-usage                               # 从本�
 
 本仓库把构建好的 `lib/` 与 `cordis.patch.yml` 一并入库，且不声明任何构建脚本，因此安装时不会在你的机器上执行代码，也不需要 git 依赖通常会要求的构建授权：加载的就是已入库的产物本身。`dsh plugin add` 会把 `dsh-local-usage` 追加到该 profile 的 bundle 列表，`dsh --profile <名称> --dump-config` 可以看到它贡献的那一行 `local-usage`。一行同时挂载两半：它加载 Host 半边，而由于 manifest 声明了 `dsh.client.platform: web`，同一行也是浏览器加载面板的依据。
 
-Host 半边还必须被 Client 装配选中：在 `packages/api/remotes/src/client/index.ts` 挂载其生成的 contribution 之前，新的 Remote 命名空间对浏览器不可见。
+一个 profile 的 bundle 列表是在进程启动时组装的：通过**插件 → 添加插件**安装会作用于正在运行的进程；而在命令行安装时，若已有 dsh 进程在该 profile 上服务，需要重启该进程，入口才会出现。
 
 ### 阅读页面
 
@@ -81,6 +91,26 @@ Host 半边还必须被 Client 装配选中：在 `packages/api/remotes/src/clie
 
 -----
 
+<a id="troubleshooting"></a>
+## Troubleshooting
+
+**面板能打开，但显示无法读取用量数据。** 说明浏览器半边已挂载、Host 半边没有，于是它要调用的路由并不存在。启动输出会直接点名原因：
+
+```
+dsh: warning: 1 entry did not activate
+local-usage (dsh-local-usage): Error: cannot get property "connection" without inject
+```
+
+这条信息意味着 entry 到达 Loader 时丢掉了 `inject` 列表，并在第一次读取服务时失败；造成它的唯一一种模块形状见 [Dev Note](#development)，`tests/module-shape.host.spec.ts` 守着这条规则。要确认安装本身正常，可以问组合后的配置：`dsh --profile <名称> --dump-config` 会在 `- id: local-usage` 上方打印 `# == dsh-local-usage`。
+
+**插件列表里没有它，或安装被拒绝并提示 `declares no dsh.bundle`。** 只有当 manifest 声明了 `dsh.bundle.patch`、并随包提供它指向的 patch 文件时，一个包才能作为插件层安装；这两者本仓库都已入库，因此被拒绝说明装的是本包的旧副本 —— 请重新从本仓库安装。
+
+**安装失败并报 `ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF`。** 这是 profile 自身的状态，与本包无关：它的 `node_modules` 是由另一个 pnpm 版本或另一套 linker 设置创建的，与当前正在安装的那套不一致。在该 profile 目录里运行 `pnpm install`，然后重新添加插件即可。
+
+**总量看起来低于 provider 的账单。** 有三类内容按设计排除，并且会在面板的来源区块里计数，而不是被悄悄丢掉：fork 继承的前缀（已在父会话计费）、仍在流式输出、用量尚未最终确定的结算，以及任何无法读取的日志。没有命中价目表的路由按回退费率计价，并在提示行中点名。
+
+-----
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
@@ -92,17 +122,19 @@ fork 会话的日志以父会话的继承前缀开头，而那些 Turn 已在父
 
 ### 页面
 
-浏览器半边贡献一个全局面板：一个 `sidebar.panellist` 条目与一个 `main` 键控槽占用者共享同一个 id，于是侧栏拥有按钮、框架拥有主列。由于全局面板是被保留而非重新挂载的，面板会读取 `usePanelInfo`，并且只在自己被选中时才读取日志。它只通过生成的 `usageInsights` Remote 命名空间触达 Host，因此这半边不含任何折叠或定价逻辑。本产品没有图表库、引入图表库也超出边界，因此日历是用 CSS grid 单元格在语义主题 token 上以 `color-mix` 着色实现的。
+浏览器半边贡献一个全局面板：一个 `sidebar.panellist` 条目与一个 `main` 键控槽占用者共享同一个 id，于是侧栏拥有按钮、框架拥有主列。由于全局面板是被保留而非重新挂载的，面板会读取 `usePanelInfo`，并且只在自己被选中时才读取日志。它只通过 Host 半边注册的那一个 Fetch 路由触达 Host，因此这半边不含任何折叠或定价逻辑，本包也不需要出现在产品的 Remote 装配中。本产品没有图表库、引入图表库也超出边界，因此日历是用 CSS grid 单元格在语义主题 token 上以 `color-mix` 着色实现的。
 
 -----
 
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Session query](../../session-query/session-query/README.zh.md) —— Host 半边用于枚举与读取的冷读引擎。
-- [Token meter](../../llm/token-meter/README.zh.md) —— 本包提取器所镜像的持久 `tokenUsage` 投影，及其结算与重试语义。
-- [Session projection cache](../../session/session-projection-cache/README.zh.md) —— 持久化的按会话投影存储，读取日志之外的零 I/O 方案。
-- [Adding a Remote API](../../../docs/cookbook/adding-a-remote-api.zh.md) —— 本包 Host 命名空间遵循的五个步骤。
+以下子系统是本包读取、镜像或据以安装的 DeepSeek Harness 包。由于本包独立发布、已不在那棵源码树内，链接一律指向 Harness 仓库。
+
+- [Session query](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/session-query/session-query/README.zh.md) —— Host 半边用于枚举与读取的冷读引擎。
+- [Token meter](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/llm/token-meter/README.zh.md) —— 本包提取器所镜像的持久 `tokenUsage` 投影，及其结算与重试语义。
+- [Session projection cache](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/session/session-projection-cache/README.zh.md) —— 持久化的按会话投影存储，读取日志之外的零 I/O 方案。
+- [打包与安装插件](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.zh.md) —— 本包据以安装的 bundle 与 profile 模型。
 
 <a id="model-experience"></a>
 ## Model Experience
