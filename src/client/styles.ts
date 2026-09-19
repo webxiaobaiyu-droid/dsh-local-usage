@@ -202,9 +202,22 @@ export const styles = String.raw`
 /* ── Calendar ─────────────────────────────────────────────────────────── */
 
 .dlu-calendar {
-  /* One ramp for the whole figure: the empty step is a neutral surface, and
-   * the four active steps mix the blue accent into the page surface. */
-  --usage-heat-0: var(--dsw-alias-bg-layer-2);
+  /* One ramp for the whole figure, every step mixed into the page surface so
+   * the whole scale travels with the theme.
+   *
+   * The empty step is a low wash of the text colour rather than a surface
+   * token, because no surface token is offset from the page in both themes:
+   * 'bg-layer-2' resolves to the page background itself in the light theme,
+   * which left every day the profile did not spend on invisible and made the
+   * calendar a scatter of blue rather than a year. Mixing ink into the surface
+   * gives a neutral tile that is one quiet step off the page in either theme —
+   * light grey on white, a lifted charcoal on black — and keeps the empty step
+   * built the same way as the four active ones.
+   *
+   * It stays clearly below the first active step: that one is *blue*, and a
+   * change of hue reads at a glance where a change of lightness this small
+   * would not. */
+  --usage-heat-0: color-mix(in oklab, var(--dsw-alias-label-primary) 6%, var(--dsw-alias-bg-base));
   --usage-heat-1: color-mix(in oklab, var(--dsw-alias-link) 18%, var(--dsw-alias-bg-base));
   --usage-heat-2: color-mix(in oklab, var(--dsw-alias-link) 38%, var(--dsw-alias-bg-base));
   --usage-heat-3: color-mix(in oklab, var(--dsw-alias-link) 62%, var(--dsw-alias-bg-base));
