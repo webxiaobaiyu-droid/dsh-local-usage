@@ -20,14 +20,16 @@ kind: "package-reference"
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
-- [Dev Note](#dev-note)
+- [Development](#development)
 
 -----
 
 <a id="use-this-package"></a>
 ## Use this package
 
-在侧栏选择**用量统计**即可打开面板。它是全局面板，属于 profile 而非某个会话，因此在切换会话时依然可用；在已经提供 Session 查询引擎、会话存储、带侧栏与主列的布局外壳、以及 Client Remote 装配的 Web 组合中挂载 `dsh-local-usage` 即可，无需任何配置。
+在侧栏选择**用量统计**即可打开面板。它是全局面板，属于 profile 而非某个会话，因此在切换会话时依然可用；在已经提供 Session 查询引擎、会话存储、以及带侧栏与主列的布局外壳的 Web 组合中挂载 `dsh-local-usage` 即可，无需任何配置。
+
+两半之间不需要额外接线：Host 半边自行注册 Fetch 路由，浏览器半边直接调用它，因此本包不会出现在产品的 Remote 装配中。
 
 Host 半边还必须被 Client 装配选中：在 `packages/api/remotes/src/client/index.ts` 挂载其生成的 contribution 之前，新的 Remote 命名空间对浏览器不可见。
 
@@ -114,13 +116,44 @@ fork 会话的日志以父会话的继承前缀开头，而那些 Turn 已在父
 - **报告仍携带页面不再渲染的按模型与按会话行** —— 加权路由与会话排行作为第一步已从页面移除，但这些行保留在 wire 契约中，直到有界面需要它们。
 
 <a id="dev-note"></a>
+<a id="development"></a>
+## Development
+
+### 前置条件
+
+Node 22 与 pnpm，外加一份 **DeepSeek Harness 源码检出**。本包编译与测试所依赖的 `@deepseek-ai/*` 都是 Harness 的 workspace 包：npm 上的 rc 版本会解析 `@deepseek-ai/dsh-type-meta`，而它并未发布到 registry，因此只有源码检出才能拿到这些包。
+
+```sh
+pnpm install
+pnpm run link:host -- --src /path/to/deepseek-harness
+# 或者：DSH_SRC=/path/to/deepseek-harness pnpm run link:host
+```
+
+`link:host` 会把本仓库的 `node_modules/@deepseek-ai/*` 指向该检出（并打印链接来源的 Harness 版本），包清单在 `scripts/link-host-packages.mjs`；新增宿主 import 时在其中补一条即可。这些链接只是开发期状态：不会被提交，而 `lib/` 在运行期从宿主进程解析同样的包。
+
+### 常用命令
+
+| 命令 | 作用 |
+|---|---|
+| `pnpm test` | 运行两半的 vitest 套件 |
+| `pnpm run typecheck` | 以两个程序分别类型检查两半 |
+| `pnpm run build` | 打包 `lib/*.js`，并产出 `lib/types` |
+| `pnpm run watch` | 只重建打包产物，用于热重载循环 |
+
 ### Dev Note
 
 <details>
 <summary>面向维护者的工作上下文 —— 点击展开</summary>
 
-两半在不同 face 构建。Host 半边及其生成的 Typert 产物在 Host pass 产出（`hostPhase: true`），因为在本包的 `./remote` 声明存在之前 Client TypeScript 程序无法编译；浏览器产物在 Client pass 产出。
+Host 半边与浏览器半边都会在相同的 key 上合并 Cordis `Context`，但服务不同，因此**同一个 TypeScript 程序无法同时看到两者**；Harness 自身也是出于同样的原因拆分类型检查。`tsconfig.host.json` 与 `tsconfig.client.json` 是 `typecheck` 与编辑器所用的两个程序，而 `tsconfig.host.build.json` / `tsconfig.client.build.json` 是它们收窄后的子集，用于把声明产出到 `lib/types` —— 这正是 `package.json` 的 `exports` 所指向的布局，也是 Harness 自身客户端包的布局（`rootDir: src`，`outDir: lib/types`）。
+
+由此有两点需要注意：
+
+- `tsdown` 只打包 JavaScript，使用共享的 `tsconfig.json`。两半的 `dts` 都关闭：在那里产出的声明会把浏览器产物的 module-loader banner/footer 包进声明文件而破坏解析，Harness 自己的客户端预设也因此关闭它。
+- 声明只有在 `pnpm run build`（或 `pnpm run build:types`）之后才存在；由于本包通过 git 分发，声明与打包产物一同入库 —— 只跑 `tsdown` 会让 `exports` 里的 `types` 条件指向不存在的文件。
+
+这里用仓库自己的脚本调用 `tsc`，而不是 `tsc -b`：本包不在 Harness 的 project reference 图内，因此它针对检出的已构建声明文件编译，而非针对该工程图。
 
 </details>
 
-**Runtime invariant:** Host 半边拥有一个 `usageInsights` Remote 命名空间，以及一个以会话 id 为键的内存样本缓存；浏览器半边注册一个本地化的侧栏条目及其对应的 `main` 面板。不发布 companion，两半都不自行发出 Cordis 事件。
+**Runtime invariant:** Host 半边拥有一个提供折叠报告的 HTTP 路由，以及一个以会话 id 为键的内存样本缓存；浏览器半边注册一个本地化的侧栏条目及其对应的 `main` 面板，并且只通过该路由访问 Host。不发布 companion，两半都不自行发出 Cordis 事件。

@@ -1,0 +1,11 @@
+{
+  // Browser half: the self-registering module-loader factory and the React
+  // panel it renders.
+  //
+  // The split from the host half is load-bearing — see tsconfig.host.json.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/client/**/*", "src/types.ts", "tests/heatmap-grid.client.spec.ts", "tests/wire-report.client.spec.ts"]
+}

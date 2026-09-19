@@ -34,9 +34,11 @@
   ],
   "scripts": {
     "prepare": "tsdown",
-    "build": "tsdown",
+    "build": "tsdown && npm run build:types",
+    "build:types": "tsc -p tsconfig.host.build.json && tsc -p tsconfig.client.build.json",
+    "link:host": "node scripts/link-host-packages.mjs",
     "watch": "tsdown --watch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.host.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run"
   },
   "peerDependencies": {
@@ -44,6 +46,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.3",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
     "react": "^18.2.0",

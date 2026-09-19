@@ -55,15 +55,21 @@ export const inject = ['slots', 'locale']
  *
  * A plugin served outside the product's build has to carry and inject its own
  * sheet; the tag is keyed so a reload replaces rather than accumulates.
+ *
+ * @returns the disposer that removes the tag this call installed; unloading the
+ * plugin therefore leaves no orphaned sheet behind.
  */
-function injectStyles(): void {
+function injectStyles(): () => void {
   const existing = document.querySelector(`style[data-plugin-css="${STYLE_ID}"]`)
-  if (existing !== null) return
+  if (existing !== null) return () => {}
   const tag = document.createElement('style')
   tag.dataset.plugin = 'dsh-local-usage'
   tag.dataset.pluginCss = STYLE_ID
   tag.textContent = styles
   document.head.appendChild(tag)
+  return () => {
+    tag.remove()
+  }
 }
 
 /**

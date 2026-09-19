@@ -20,16 +20,16 @@ It is deliberately not a Settings page: a year of days needs the main column's w
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
-- [Dev Note](#dev-note)
+- [Development](#development)
 
 -----
 
 <a id="use-this-package"></a>
 ## Use this package
 
-Select **Usage** in the sidebar to open the panel. Mount `dsh-local-usage` in a Web composition that already provides the Session query engine, the session store, the layout shell with its sidebar and main column, and the Client Remote assembly. The panel registers its own sidebar entry and needs no configuration.
+Select **Usage** in the sidebar to open the panel. Mount `dsh-local-usage` in a Web composition that already provides the Session query engine, the session store, and the layout shell with its sidebar and main column. The panel registers its own sidebar entry and needs no configuration.
 
-The Host half must also be selected by the Client assembly: a new Remote namespace is invisible to the browser until `packages/api/remotes/src/client/index.ts` mounts its generated contribution.
+Nothing else has to be wired for the two halves to meet: the Host half registers its own Fetch route and the browser half calls it, so this package never appears in the product's Remote assembly.
 
 ### Reading the page
 
@@ -116,13 +116,44 @@ These limits define what the page can report; they are current package constrain
 - **The report still carries per-model and per-session rows that the page no longer renders** — the weighted route and session rankings were removed from the page as a first pass, and their rows stay in the wire contract until a surface wants them again.
 
 <a id="dev-note"></a>
+<a id="development"></a>
+## Development
+
+### Prerequisites
+
+Node 22 and pnpm, plus a **DeepSeek Harness source checkout**. The `@deepseek-ai/*` packages this plugin compiles and tests against are workspace packages of the harness: the release candidates on npm resolve `@deepseek-ai/dsh-type-meta`, which is not on the registry, so a checkout is the only way to obtain them.
+
+```sh
+pnpm install
+pnpm run link:host -- --src /path/to/deepseek-harness
+# or: DSH_SRC=/path/to/deepseek-harness pnpm run link:host
+```
+
+`link:host` points this repo's `node_modules/@deepseek-ai/*` at that checkout — the harness version it linked from is printed — and its list of packages lives in `scripts/link-host-packages.mjs`. Add an entry there when a new host import appears. The links are development-only state: nothing about them is committed, and `lib/` resolves the same packages from the host process at runtime.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `pnpm test` | the vitest suites of both halves |
+| `pnpm run typecheck` | typechecks the two halves as two programs |
+| `pnpm run build` | bundles `lib/*.js`, then emits `lib/types` |
+| `pnpm run watch` | rebuilds the bundles only, for a reload loop |
+
 ### Dev Note
 
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-The two halves build in different faces. The Host half and its generated Typert artifacts are emitted during the Host pass (`hostPhase: true`), because the Client TypeScript program cannot compile until this package's `./remote` declarations exist; the browser artifact is emitted during the Client pass.
+The Host half and the browser half each merge the Cordis `Context` under the same keys with different services, so **one TypeScript program cannot see both**; the harness splits its own typecheck for the same reason. `tsconfig.host.json` and `tsconfig.client.json` are the two programs used by `typecheck` and by editors, and `tsconfig.host.build.json` / `tsconfig.client.build.json` are their narrow descendants that emit declarations to `lib/types` — the layout `package.json`'s `exports` points at, and the layout the harness uses for its own client packages (`rootDir: src`, `outDir: lib/types`).
+
+Two consequences follow:
+
+- `tsdown` bundles the JavaScript only, from the shared `tsconfig.json`. Its `dts` is off in both halves: declarations emitted there would wrap the browser bundle's module-loader banner and footer into the declaration file and break parsing, which is why the harness's own client preset disables it too.
+- Declarations exist only after `pnpm run build` (or `pnpm run build:types`), and they are committed along with the bundles because the package is distributed from git — a `lib/` built by `tsdown` alone would leave the `types` conditions in `exports` dangling.
+
+`tsc` is invoked through the repo's own script rather than `tsc -b`: this package is out of the harness's project-reference graph, so it compiles against the checkout's built declaration files instead of its project graph.
 
 </details>
 
-**Runtime invariant:** The Host half owns one `usageInsights` Remote namespace and one in-memory sample cache keyed by session id; the browser half registers one localized sidebar entry and the matching `main` panel. No companion is published, and neither half emits a Cordis event of its own.
+**Runtime invariant:** The Host half owns one HTTP route that serves the folded report and one in-memory sample cache keyed by session id; the browser half registers one localized sidebar entry and the matching `main` panel, and reaches the Host only over that route. No companion is published, and neither half emits a Cordis event of its own.

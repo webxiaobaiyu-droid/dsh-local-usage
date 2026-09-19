@@ -1,0 +1,13 @@
+{
+  // Declaration pass for the browser half. `rootDir: src` is what puts the
+  // output at `lib/types/client/index.d.ts`, matching the `./client` export.
+  "extends": "./tsconfig.client.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src/client/**/*", "src/types.ts"]
+}

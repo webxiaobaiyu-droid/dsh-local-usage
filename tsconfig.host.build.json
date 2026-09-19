@@ -1,0 +1,18 @@
+{
+  // Declaration pass for the Host half, written to `lib/types` — the layout the
+  // harness's own packages use (`rootDir: src`, `outDir: lib/types`).
+  //
+  // Declarations are emitted by tsc rather than by tsdown: the browser half's
+  // bundle carries a module-loader banner/footer that tsdown would wrap into the
+  // declaration file and break, so the harness ships both halves' types from
+  // `lib/types` and the standalone repo follows the same rule.
+  "extends": "./tsconfig.host.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src/index.ts", "src/aggregate.ts", "src/pricing.ts", "src/types.ts"]
+}

@@ -273,6 +273,31 @@ async function handleReport(
 }
 
 /**
+ * The one route-registration face of `ctx.connection`.
+ *
+ * This plugin reaches the Fetch carrier through a local structural type rather
+ * than the Context augmentation: the host's Context declares no `connection`
+ * member, so the harness's own route registrars read it with a cast (see
+ * `session-log-export`). Keeping the shape here also means the plugin carries no
+ * dependency on the package that provides the service.
+ */
+interface UsageInsightsConnection {
+  readonly fetch: {
+    register(route: {
+      readonly path: string
+      readonly methods: readonly ('GET' | 'HEAD')[]
+      readonly requestBody: 'buffered'
+      readonly fetch: (request: Request) => Promise<Response>
+    }): () => Promise<void>
+  }
+}
+
+/** Read the Fetch carrier off the Host context. */
+function connectionOf(ctx: Context): UsageInsightsConnection {
+  return Reflect.get(ctx, 'connection') as UsageInsightsConnection
+}
+
+/**
  * Register the report route.
  * @param ctx - Host context carrying the carrier and the session query engine.
  * @param config - plugin configuration; omitted fields keep their defaults.
@@ -285,7 +310,7 @@ export function apply(ctx: Context, config: UsageInsightsConfig = DEFAULT_CONFIG
     cache.delete(session.id)
   })
   ctx.effect(
-    () => ctx.connection.fetch.register({
+    () => connectionOf(ctx).fetch.register({
       path: REPORT_PATH,
       methods: ['GET'],
       requestBody: 'buffered',

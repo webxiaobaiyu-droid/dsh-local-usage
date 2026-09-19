@@ -42,6 +42,8 @@ export default defineConfig([
     platform: 'node',
     target: 'es2024',
     fixedExtension: false,
+    // Types ship from lib/types, emitted by the tsc declaration passes in
+    // `build`, so both halves have one declaration pipeline.
     dts: false,
     clean: false,
     // Peer dependencies stay imports: the host's own instances are the ones
@@ -57,6 +59,10 @@ export default defineConfig([
     platform: 'browser',
     target: 'es2024',
     fixedExtension: false,
+    // Types ship from lib/types, emitted by the tsc declaration passes in
+    // `build`; dts here would wrap the banner/footer below into the declaration
+    // file and break parsing, which is why the harness's client preset disables
+    // it too.
     dts: false,
     clean: false,
     sourcemap: true,
