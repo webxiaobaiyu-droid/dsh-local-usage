@@ -12,6 +12,18 @@
   ],
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/webxiaobaiyu-droid/dsh-local-usage.git"
+  },
+  "homepage": "https://github.com/webxiaobaiyu-droid/dsh-local-usage#readme",
+  "bugs": {
+    "url": "https://github.com/webxiaobaiyu-droid/dsh-local-usage/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "lib/index.js",
   "exports": {
     ".": {
