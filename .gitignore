@@ -1,0 +1,5 @@
+node_modules/
+
+# lib/ is intentionally NOT ignored: this plugin is distributed from git, and a
+# checked-in build keeps installation independent of whether the installer runs
+# dependency scripts (pnpm blocks them by default until approved).

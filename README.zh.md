@@ -1,0 +1,126 @@
+---
+description: "dsh Web 客户端的用量统计面板：从全部持久会话日志折叠出的历史 token 与金额统计，以滚动一年的消费热力图呈现，并自述计价方式与数据来源。"
+kind: "package-reference"
+---
+
+# dsh-local-usage
+
+[English](README.md) | 中文
+
+## Summary
+
+**用量统计**回答这台机器花了多少钱、花在了什么时候。Harness 按会话记录了精确的 provider token 计量，但既不提供跨会话聚合，也完全不涉及货币，因此本包把两者都补上：Host 半边枚举全部逻辑会话，把每个持久日志折叠为「每次计费结算一个样本」，将样本归因到实际计费的 `provider/model` 路由，再按配置的价目表计价；Client 半边贡献一个**全局面板**——侧栏入口，在主列中以全宽页面打开——其核心是当年的日历。
+
+它刻意不做成设置页：一整年的格子需要主列的宽度才不必横向滚动，而且一个 profile 花了多少钱并不是一项偏好设置。
+
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+在侧栏选择**用量统计**即可打开面板。它是全局面板，属于 profile 而非某个会话，因此在切换会话时依然可用；在已经提供 Session 查询引擎、会话存储、带侧栏与主列的布局外壳、以及 Client Remote 装配的 Web 组合中挂载 `dsh-local-usage` 即可，无需任何配置。
+
+Host 半边还必须被 Client 装配选中：在 `packages/api/remotes/src/client/index.ts` 挂载其生成的 contribution 之前，新的 Remote 命名空间对浏览器不可见。
+
+### 阅读页面
+
+范围选择器决定观察的镜头：**当天**、**近 7 天**、**本月**、**本季度**或**全年**。每个范围都以今天结束，因此「本月」指的是本月至今，而不是一个已结束的自然月。
+
+其下以一个大号主数字给出所选范围内的总花费，下面一排格子承载总 token、输入、输出、缓存三个桶、计费调用次数，以及贡献了用量的会话数。
+
+日历是稳定的画框：以周日为首列，左侧用紧凑的 `日 1 2 3 4 5 6` 标签，横跨截至本周的滚动 52 周，并且不随范围变化。格子是固定大小的方块，边长由面板实测决定：当一年的列数能以最小边长放下时，格子会长大铺满宽度；再窄就保持最小边长并丢弃最旧的若干周——因此无论面板多窄（包括展开侧边栏时）都不会横向滚动，也不会被裁掉。格子不带描边，唯一的标记就是颜色深浅；悬停任意一天会弹出卡片，给出当天的花费、总 token、输入、输出、缓存命中的 token 数与调用次数。
+
+色阶按窗口内活跃日的分位数分级——中位数、75 分位、90 分位——因此它会随这个 profile 的真实消费分布自适应，而不是假定某种分布。
+
+### 配置
+
+| 字段 | 默认值 | 含义 |
+|---|---|---|
+| `currency` | `CNY` | 所有金额的表达币种；插件不做汇率换算。 |
+| `models` | DeepSeek V4.1 Flash 与 V4 Pro 两张价目 | 按路由模型匹配的价目表，先匹配者生效。 |
+| `fallback` | Flash 价目 | 没有任何价目命中的路由所用的费率。 |
+| `peakWindows` | `09:00-12:00`、`14:00-18:00` | 北京时间的高峰时段；留空即关闭高峰计价。 |
+| `peakWeekdaysOnly` | `true` | 周末是否始终按空闲时段计价。 |
+| `peakMultiplier` | `2` | 高峰时段对每条费率施加的倍数。 |
+
+每张价目给出 `input`、`cacheRead`、`cacheWrite`、`output`（币种单位／百万 token），以及认领路由的 `match` 子串。内置默认值是 DeepSeek 官方公布的 `deepseek-flash` 与 `deepseek-v4-pro` 空闲时段人民币价格；经聚合商或转售商提供的路由必须由使用者自行定价，页面会点名所有回退到默认费率的路由，而不是给出一个它无法支撑的数字。
+
+### 金额能信到什么程度
+
+花费是本插件自己算出来的，不是从 provider 账单读回来的：各桶 `token × 配置费率`，并按每次调用自身的时刻判定高峰/空闲。面板在**计价方式**里明确写出公式、当前生效费率和高峰时段——因为一个估算值与账单的差异来源，恰恰是读者容易默认已经包含的那些东西：预购额度、套餐包、阶梯折扣、赠送余额、聚合商加价与转售差价都不在其中。请以 provider 账单为准。
+
+### 数据从哪来
+
+面板在**用量依据**里自述来源：Harness 没有用量数据库，因此统计折叠自会话的持久事件日志本身——本机全部会话、跨所有工作目录，经会话查询服务读取并做重放校验。该区块还给出落盘形态（`<DSH_HOME>/sessions/<工作目录>/<会话>/session.v3.jsonl.zstd`）、不计入的部分（fork 的继承前缀、尚未结算的在途调用、读不出的日志）、以及不上传也不发起外部请求这一事实，最后给出产生当前数字的那一次读取的计数。
+
+### 数字的含义
+
+每个**计费结算**产生一个样本，语义与 Harness 自身的 `tokenUsage` 投影一致：同一 `(turn, step)` 槽位的结算会替换先前的样本，`llm/retry-started` 关闭该槽位使重试的尝试单独计费，完全相同的重复结算不改变任何数字，而未提交可见消息的结算仍通过其内嵌 stream 携带的 usage 计入。因此提取器能精确复现持久投影的总量，这也正是本包针对真实日志所做的验证。`uncachedInputTokens` 不含缓存流量；`cacheReadTokens` 与 `cacheWriteTokens` 在 provider 未上报时计为零。花费为各桶 `token × 费率`，并按每个样本自身的时刻计价，因此一天之内跨越高峰边界时，两侧样本各自正确，而不会被平均。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+### Host 折叠
+
+`UsageInsightsController` 通过 `ctx.sessionQuery.listSessions()` 枚举会话，该调用不读取任何事件日志；随后在固定的读并发下通过 `ctx.sessionQuery.readSession()` 把每个日志读一次。读取是昂贵的一半、折叠不是，因此缓存保存的是每个会话抽取出的样本而非成品报告，每次调用都以当前配置重新计价；于是配置变更无需重读任何日志即可生效。会话一旦记录新事件，其缓存条目立即失效，请求也可以强制全量重读。
+
+fork 会话的日志以父会话的继承前缀开头，而那些 Turn 已在父会话计费，因此只折叠 `inheritedEventCount` 及其之后的事件。会话标题仍从完整日志折叠（含继承前缀），因为标题是关于对话本身的事实，而非关于计费。
+
+### 页面
+
+浏览器半边贡献一个全局面板：一个 `sidebar.panellist` 条目与一个 `main` 键控槽占用者共享同一个 id，于是侧栏拥有按钮、框架拥有主列。由于全局面板是被保留而非重新挂载的，面板会读取 `usePanelInfo`，并且只在自己被选中时才读取日志。它只通过生成的 `usageInsights` Remote 命名空间触达 Host，因此这半边不含任何折叠或定价逻辑。本产品没有图表库、引入图表库也超出边界，因此日历是用 CSS grid 单元格在语义主题 token 上以 `color-mix` 着色实现的。
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+- [Session query](../../session-query/session-query/README.zh.md) —— Host 半边用于枚举与读取的冷读引擎。
+- [Token meter](../../llm/token-meter/README.zh.md) —— 本包提取器所镜像的持久 `tokenUsage` 投影，及其结算与重试语义。
+- [Session projection cache](../../session/session-projection-cache/README.zh.md) —— 持久化的按会话投影存储，读取日志之外的零 I/O 方案。
+- [Adding a Remote API](../../../docs/cookbook/adding-a-remote-api.zh.md) —— 本包 Host 命名空间遵循的五个步骤。
+
+<a id="model-experience"></a>
+## Model Experience
+
+无。本包读取持久会话日志并渲染浏览器页面，不添加任何模型可见内容，也不发起模型调用。
+
+#### KV Cache effect
+
+无；本包既不组装也不发送 provider 请求。
+
+## Known Limitations and Deferred Work
+
+<a id="known-limitations-and-deferred-work"></a>
+
+这些限制界定了页面能报告什么；它们是本包当前的约束。
+
+- **价格是配置，不是账单** —— Harness 只记录 token、从不记录货币，因此每个金额都是 `token × 配置费率`；没有命中价目的路由按回退费率计价，并在页面的提示行中点名，而不是被悄悄估算。
+- **未建模中国法定节假日** —— 高峰时段遵循官方公布的北京时间周一至周五时段，因此窗口内的节假日工作日会按高峰计价。
+- **仍在流式输出的结算不贡献数字** —— 其用量尚未最终确定，后续结算仍可能替换它，因此运行中会话的最新一轮交换只有结算后才出现。
+- **按设计排除 fork 继承前缀** —— fork 会话只报告它自身造成的花费，因此按会话的统计不能相加来还原父对话的总花费。
+- **日历只展示一个滚动窗口** —— 面板在挂载时固定画框，因此需要任意日期区间的部署目前还没有切换控件。
+- **报告仍携带页面不再渲染的按模型与按会话行** —— 加权路由与会话排行作为第一步已从页面移除，但这些行保留在 wire 契约中，直到有界面需要它们。
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>面向维护者的工作上下文 —— 点击展开</summary>
+
+两半在不同 face 构建。Host 半边及其生成的 Typert 产物在 Host pass 产出（`hostPhase: true`），因为在本包的 `./remote` 声明存在之前 Client TypeScript 程序无法编译；浏览器产物在 Client pass 产出。
+
+</details>
+
+**Runtime invariant:** Host 半边拥有一个 `usageInsights` Remote 命名空间，以及一个以会话 id 为键的内存样本缓存；浏览器半边注册一个本地化的侧栏条目及其对应的 `main` 面板。不发布 companion，两半都不自行发出 Cordis 事件。
