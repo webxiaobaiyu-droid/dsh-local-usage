@@ -17,8 +17,14 @@ export declare const css: {
     readonly calendarTotal: "dlu-calendarTotal";
     readonly calendarYear: "dlu-calendarYear";
     readonly cell: "dlu-cell";
+    readonly cellRow: "dlu-cellRow";
     readonly cells: "dlu-cells";
     readonly controls: "dlu-controls";
+    readonly dayDetail: "dlu-dayDetail";
+    readonly dayHeader: "dlu-dayHeader";
+    readonly dayTitle: "dlu-dayTitle";
+    readonly dayTitleRow: "dlu-dayTitleRow";
+    readonly dayWeekday: "dlu-dayWeekday";
     readonly disclosure: "dlu-disclosure";
     readonly disclosureBody: "dlu-disclosureBody";
     readonly disclosureSummary: "dlu-disclosureSummary";
@@ -50,6 +56,12 @@ export declare const css: {
     readonly pricingCaveat: "dlu-pricingCaveat";
     readonly pricingHint: "dlu-pricingHint";
     readonly pricingRatesLabel: "dlu-pricingRatesLabel";
+    readonly projectBlock: "dlu-projectBlock";
+    readonly projectCell: "dlu-projectCell";
+    readonly projectHeading: "dlu-projectHeading";
+    readonly projectName: "dlu-projectName";
+    readonly projectPath: "dlu-projectPath";
+    readonly projectTable: "dlu-projectTable";
     readonly range: "dlu-range";
     readonly ranges: "dlu-ranges";
     readonly scan: "dlu-scan";

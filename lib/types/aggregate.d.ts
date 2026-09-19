@@ -83,6 +83,11 @@ export declare function localDayKey(time: number): string;
 export declare function samplesOf(events: readonly SessionEvent[]): UsageSample[];
 /**
  * Fold every session's samples into one priced report.
+ * The window is whatever the caller asked for, and every dimension is folded
+ * over that same window, so narrowing it to one day yields that day's totals,
+ * that day's routes and that day's projects from the samples the Host already
+ * holds. That is what makes a day drill-down a re-fold rather than a re-read.
+ *
  * @param inputs - per-session inputs, in any order.
  * @param options - rate card and peak schedule.
  * @param meta - host-supplied report facts.

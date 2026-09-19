@@ -16,6 +16,7 @@ It is deliberately not a Settings page: a year of days needs the main column's w
 What the panel gives you, in one place:
 
 - **A rolling-year calendar** of daily spend — 52 weeks ending with the current one, shaded by a quantile ramp over the window's active days, with a hover card per day.
+- **A page per day** — clicking any cell opens that day on its own page: its totals, and how much of them each working directory produced.
 - **Five ranges** — today, last 7 days, this month, this quarter, this year — every one of them ending today.
 - **Totals for the range** — cost, total tokens, the uncached-input, output, cache-read and cache-write buckets, billed calls, and contributing sessions.
 - **A rate card you configure** — per-model input, cache-read, cache-write and output prices, a fallback rate, and a Beijing-time peak schedule with a multiplier.
@@ -66,6 +67,14 @@ Below it a hero figure states total spend over the selected range, above a row o
 The calendar is the stable frame: it is Sunday-first with a one-glyph weekday gutter — `日 一 二 三 四 五 六` in Chinese, `S M T W T F S` in English, from the dictionary rather than from a hard-coded set — spans a rolling 52 weeks ending with the current one, and does not change when the range does. Cells are fixed squares whose edge is measured from the panel: while a year of columns fits at the minimum edge they grow to fill it, and below that the grid keeps the minimum edge and drops its oldest weeks, so it never scrolls sideways however narrow the panel gets — including with the sidebar expanded. Cells carry no border; intensity is the only mark on them, and hovering one opens a card with that day's cost, total tokens, input, output, and cache-read tokens, and call count. The card's figures are exact — every digit, grouped the reader's way — because a rounded count is the one thing a drill-down cannot answer.
 
 Shading is a quantile ramp over the window's active days — median, then 75th and 90th percentiles — so the scale adapts to how the profile actually spends rather than assuming a distribution.
+
+### The day page
+
+Every cell is a button, so the calendar is a way in rather than only a picture of the year. Clicking one opens that day on its own page, and the keyboard reaches the same place: the grid is a single tab stop, the arrow keys walk it, `Home` and `End` jump to the ends of a week, `Enter` opens the focused day, and a screen reader gets each cell's date, cost, token count and call count as its name. The day page **replaces** the panel's contents rather than floating over it, so the calendar is never half-covered behind a card; its back control returns to the calendar and hands focus back to the cell you left from, rather than dropping you at the top of a year you would have to find it in again.
+
+The page states the day's own totals and buckets, then splits them by **working directory**. A directory is what a reader means by a project: a session is created in exactly one, it is what the harness itself groups session logs by on disk, and it is the only axis in this data that answers *what* a day's tokens went to rather than *when* they went. Each row gives a directory's cost, total tokens, output tokens, call count and contributing session count, with the full path under its short name. Sessions whose headers recorded no directory are not dropped — their spend is real — and are collected into a labelled row of their own, so the rows still add up to the day's total. A day with no usage says so rather than rendering an empty table.
+
+Opening a day is not a second read of the logs: it is the same fold narrowed to a one-day window over the samples the Host already holds, which is what lets a cell lead to a whole page instead of a drawn-out fetch.
 
 The ramp's empty step is a visible neutral tile rather than the page background, so a quiet month reads as an empty month instead of as nothing at all. It is a low wash of the text colour mixed into the surface, which is what makes it correct in both themes: no surface token is offset from the page in both, and the one that is (`bg-layer-2`) resolves to the page background itself in the light theme. The first active step stays clearly distinct from it by *hue* — it is blue — which reads at a glance where a lightness step this small would not.
 
@@ -138,6 +147,8 @@ A forked session's log begins with its parent's inherited prefix and those turns
 
 The browser half contributes a global panel: one `sidebar.panellist` entry sharing its id with one `main` keyed-slot occupant, so the sidebar owns the button and the frame owns the column. Because a global panel is retained rather than remounted, the panel reads `usePanelInfo` and only reads logs while it is the selected one. It reaches the Host over the one Fetch route the Host half registers, so this half holds no fold logic and no pricing — and the package needs no place in the product's Remote assembly. There is no charting library in this product and adding one is out of bounds, so the calendar is a CSS grid of cells shaded with `color-mix` over a semantic theme token.
 
+The day page is the panel's own second view, not a route: the panel holds the open day and fetches that day's report over the same route with a one-day window, which the Host answers by re-pricing the samples it already cached. The day's report is held in its own state so a slow fold never blanks the calendar behind it, and the per-directory rows the page renders are folded by the same function that folds the year — the only difference between the two is the window.
+
 The locale reaches the panel through the plugin's own injected face rather than a second subscription: the renderer re-derives each entry's dictionary function from the locale revision, so a language switch already re-renders the panel, and the injected `locale()` reading the service during render is therefore always the id the dictionary beside it was resolved from. Formatters are cached per `(locale, currency, digits)` and a rejected construction is cached as absent, which is what keeps a misconfigured currency code from throwing on every render.
 
 -----
@@ -174,7 +185,8 @@ These limits define what the page can report; they are current package constrain
 - **A settlement still streaming contributes nothing** — its usage is not final and a later settlement may replace it, so the newest exchange of a running session appears only once it settles.
 - **Inherited fork prefixes are excluded by design** — a forked session reports only the spend it caused itself, so per-session figures cannot be summed to reconstruct what a parent conversation cost in total.
 - **The calendar shows one rolling window only** — a deployment that needs an arbitrary date range has no control for it yet, because the panel fixes the frame at mount.
-- **The report still carries per-model and per-session rows that the page no longer renders** — the weighted route and session rankings were removed from the page as a first pass, and their rows stay in the wire contract until a surface wants them again.
+- **A project is a working directory, not a repository** — spend is attributed to the directory a session was created in, so two checkouts of one repository are two rows, a session stays with the directory it started in even if it moved, and the day page does not drill below the directory to individual sessions.
+- **The report still carries a per-model row the page no longer renders** — the weighted route ranking was removed from the page as a first pass, and the per-session row is carried for the day page's future use; both stay in the wire contract until a surface wants them again.
 
 <a id="dev-note"></a>
 <a id="development"></a>

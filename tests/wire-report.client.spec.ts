@@ -37,6 +37,7 @@ describe('normalizeReport', () => {
     expect(report.peakMultiplier).toBe(1)
     expect(report.peakWeekdaysOnly).toBe(true)
     expect(report.models).toEqual([])
+    expect(report.projects).toEqual([])
     expect(report.sessions).toEqual([])
     expect(report.unpricedRoutes).toEqual([])
     expect(report.unpricedTokens).toBe(0)
@@ -54,6 +55,16 @@ describe('normalizeReport', () => {
       peakWeekdaysOnly: false,
       peakMultiplier: 2,
       cached: true,
+      projects: [{
+        path: '/work/api',
+        uncachedInputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 2,
+        cacheWriteTokens: 0,
+        cost: 1.5,
+        calls: 3,
+        sessions: 1,
+      }],
     })
 
     expect(report.days).toHaveLength(1)
@@ -63,5 +74,8 @@ describe('normalizeReport', () => {
     expect(report.peakWeekdaysOnly).toBe(false)
     expect(report.peakMultiplier).toBe(2)
     expect(report.cached).toBe(true)
+    // The project axis is what the day drill-down reads, so an older Host that
+    // does not send it must degrade to an empty table, never to a blank panel.
+    expect(report.projects.map(row => row.path)).toEqual(['/work/api'])
   })
 })

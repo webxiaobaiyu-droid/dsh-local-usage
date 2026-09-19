@@ -8,7 +8,8 @@
  * it covers, so the frame stays put while the reading changes.
  *
  * Everything is fetched per session fold the Host already cached, so switching
- * ranges re-prices instead of re-reading logs.
+ * ranges re-prices instead of re-reading logs — and so does opening a day, which
+ * is why a calendar cell can lead to a full page rather than a hover card.
  *
  * The panel owns no copy and no formatting of its own: sentences come from the
  * `usage` dictionary and figures from `format.ts`, both resolved against the

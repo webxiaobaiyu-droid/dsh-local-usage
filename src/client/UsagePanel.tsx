@@ -8,7 +8,8 @@
  * it covers, so the frame stays put while the reading changes.
  *
  * Everything is fetched per session fold the Host already cached, so switching
- * ranges re-prices instead of re-reading logs.
+ * ranges re-prices instead of re-reading logs — and so does opening a day, which
+ * is why a calendar cell can lead to a full page rather than a hover card.
  *
  * The panel owns no copy and no formatting of its own: sentences come from the
  * `usage` dictionary and figures from `format.ts`, both resolved against the
@@ -25,7 +26,9 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { UsageDayRow, UsageInsightsReport } from '../types.ts'
 import { CalendarHeatmap } from './CalendarHeatmap.tsx'
-import { heatmapWindow } from './heatmap-grid.ts'
+import { DayDetail } from './DayDetail.tsx'
+import { Tile } from './Tile.tsx'
+import { dayTime, heatmapWindow, weekdayKey } from './heatmap-grid.ts'
 import { DataSourceNotes } from './DataSourceNotes.tsx'
 import { PricingNotes } from './PricingNotes.tsx'
 import { formatCost, formatDay, formatInteger, formatTokens } from './format.ts'
@@ -83,6 +86,13 @@ type ViewState =
     readonly summary: UsageInsightsReport
   }
 
+/** The day page's own fold, kept apart from the calendar's so a slow one never blanks the other. */
+type DayState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading' }
+  | { readonly status: 'error' }
+  | { readonly status: 'ready'; readonly report: UsageInsightsReport }
+
 /** Local midnight of one instant. */
 function startOfDay(time: number): number {
   const date = new Date(time)
@@ -120,21 +130,6 @@ function rangeBounds(id: string, now: number): readonly [number, number] {
   if (id === 'month') return [startOfMonth(now), end]
   if (id === 'quarter') return [startOfQuarter(now), end]
   return [startOfYear(now), end]
-}
-
-/** One labelled figure in the summary strip. */
-function Tile({ value, label, detail }: {
-  readonly value: string
-  readonly label: string
-  readonly detail?: string
-}): ReactNode {
-  return (
-    <div className={css.tile}>
-      <span className={css.tileValue}>{value}</span>
-      <span className={css.tileLabel}>{label}</span>
-      {detail === undefined ? null : <span className={css.tileDetail}>{detail}</span>}
-    </div>
-  )
 }
 
 /**
@@ -178,6 +173,14 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
   const [rangeId, setRangeId] = useState('month')
   const [request, setRequest] = useState(0)
   const [state, setState] = useState<ViewState>({ status: 'idle' })
+  // The day page: which day is open, that day's own fold, and a retry counter.
+  const [selectedDay, setSelectedDay] = useState<string | undefined>(undefined)
+  const [dayState, setDayState] = useState<DayState>({ status: 'idle' })
+  const [dayRequest, setDayRequest] = useState(0)
+  // The cell a return trip should land on. Kept after the day closes so leaving
+  // a day page puts the reader back on the day they left, not at the top of a
+  // year of cells they would have to find again.
+  const [returnDay, setReturnDay] = useState<string | undefined>(undefined)
   // Selector form: the frame subscribes the main column to this key, so the
   // panel reads the same keyed selection rather than a second source of truth.
   const activePanelId = usePanelInfo(info => info.activePanelId)
@@ -212,14 +215,50 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
     return () => { current = false }
   }, [active, report, request, gridFrom, gridTo, rangeFrom, rangeTo, rangeIsWindow])
 
+  // The day page's own fold. Cheap by construction: the samples behind it are
+  // already in the Host's memory, so narrowing the window to one day re-prices
+  // them instead of walking the logs again.
+  useEffect(() => {
+    // Closing the page — or sitting on another panel — must not leave a stale
+    // fold behind for the next open to render for a moment.
+    if (!active || selectedDay === undefined) {
+      setDayState(previous => (previous.status === 'idle' ? previous : { status: 'idle' }))
+      return
+    }
+    const start = dayTime(selectedDay)
+    // Unreachable through the calendar, whose keys are always well formed; a
+    // key with no day behind it is reported rather than guessed at.
+    if (start === undefined) {
+      setDayState({ status: 'error' })
+      return
+    }
+    let current = true
+    setDayState({ status: 'loading' })
+    void report(false, start, start + MS_PER_DAY - 1).then(
+      value => { if (current) setDayState({ status: 'ready', report: value }) },
+      () => { if (current) setDayState({ status: 'error' }) },
+    )
+    return () => { current = false }
+  }, [active, dayRequest, report, selectedDay])
+
   // Read per render, never memoized: the locale id is an input to every figure
   // below, and the panel re-renders on a locale switch because its dictionary
   // function is re-derived from the locale revision.
   const activeLocale = locale()
-  const currency = state.status === 'ready' ? state.grid.currency : 'CNY'
+  // The day page contributes its own currency: it stays open while the
+  // calendar's report is being replaced, and a figure formatted in the wrong
+  // currency is worse than one formatted a moment late.
+  const currency = dayState.status === 'ready' ? dayState.report.currency
+    : state.status === 'ready' ? state.grid.currency
+      : 'CNY'
   const money = (value: number): string => formatCost(value, currency, activeLocale)
   const tokens = (value: number): string => formatTokens(value, activeLocale)
   const integer = (value: number): string => formatInteger(value, activeLocale)
+  const dateText = (value: string): string => formatDay(value, activeLocale)
+  const weekdayOf = (value: string): string => {
+    const time = dayTime(value)
+    return time === undefined ? '' : t(weekdayKey(time))
+  }
 
   const gridDays = state.status === 'ready' ? state.grid.days : []
   const peak = gridDays.reduce<UsageDayRow | undefined>(
@@ -228,81 +267,109 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
   )
 
   return (
-    <section className={css.panel} aria-busy={state.status === 'loading'}>
+    <section
+      className={css.panel}
+      aria-busy={state.status === 'loading' || dayState.status === 'loading'}
+    >
       <PanelBoundary
         fallback={(
           <p className={css.status} role="alert">{t('error')}</p>
         )}
       >
-        <header className={css.header}>
-          <div className={css.headerText}>
-            <h2 className={css.heading}>{t('heading')}</h2>
-            <p className={css.subtitle}>{t('subtitle')}</p>
-          </div>
-          <div className={css.controls}>
-            <div className={css.ranges} role="group" aria-label={t('rangeLabel')}>
-              {RANGES.map(candidate => (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  className={css.range}
-                  aria-pressed={candidate.id === rangeId}
-                  onClick={() => { setRangeId(candidate.id) }}
-                >
-                  {t(candidate.key)}
-                </button>
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={state.status === 'loading'}
-              onClick={() => { setRequest(value => value + 1) }}
-            >
-              {t('refresh')}
-            </Button>
-          </div>
-        </header>
-
-        {state.status === 'loading' || state.status === 'idle'
-          ? <p className={css.status} role="status">{t('loading')}</p>
-          : null}
-        {state.status === 'error' ? (
-          <div className={css.failure}>
-            <p role="alert">{t('error')}</p>
-            <Button variant="outline" size="sm" onClick={() => { setRequest(value => value + 1) }}>
-              {t('retry')}
-            </Button>
-          </div>
-        ) : null}
-
-        {state.status === 'ready' ? (
+        {selectedDay !== undefined ? (
+          <DayDetail
+            day={selectedDay}
+            report={dayState.status === 'ready' ? dayState.report : undefined}
+            failed={dayState.status === 'error'}
+            t={t}
+            formatCost={money}
+            formatTokens={tokens}
+            formatInteger={integer}
+            formatDay={dateText}
+            weekdayOf={weekdayOf}
+            onRetry={() => { setDayRequest(value => value + 1) }}
+            // Leaving remembers the cell, so the calendar can hand focus back to
+            // the day the reader opened rather than dropping them at the top.
+            onBack={() => {
+              setReturnDay(selectedDay)
+              setSelectedDay(undefined)
+            }}
+          />
+        ) : (
           <>
-            <SummaryStrip report={state.summary} t={t} money={money} tokens={tokens} integer={integer} />
+            <header className={css.header}>
+              <div className={css.headerText}>
+                <h2 className={css.heading}>{t('heading')}</h2>
+                <p className={css.subtitle}>{t('subtitle')}</p>
+              </div>
+              <div className={css.controls}>
+                <div className={css.ranges} role="group" aria-label={t('rangeLabel')}>
+                  {RANGES.map(candidate => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      className={css.range}
+                      aria-pressed={candidate.id === rangeId}
+                      onClick={() => { setRangeId(candidate.id) }}
+                    >
+                      {t(candidate.key)}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={state.status === 'loading'}
+                  onClick={() => { setRequest(value => value + 1) }}
+                >
+                  {t('refresh')}
+                </Button>
+              </div>
+            </header>
 
-            <CalendarHeatmap
-              from={gridFrom}
-              to={gridTo}
-              days={gridDays}
-              totalCost={state.grid.totals.cost}
-              peak={peak}
-              t={t}
-              formatCost={money}
-              formatInteger={(value: number): string => formatInteger(value, activeLocale)}
-              formatDay={(day: string): string => formatDay(day, activeLocale)}
-            />
+            {state.status === 'loading' || state.status === 'idle'
+              ? <p className={css.status} role="status">{t('loading')}</p>
+              : null}
+            {state.status === 'error' ? (
+              <div className={css.failure}>
+                <p role="alert">{t('error')}</p>
+                <Button variant="outline" size="sm" onClick={() => { setRequest(value => value + 1) }}>
+                  {t('retry')}
+                </Button>
+              </div>
+            ) : null}
 
-            <footer className={css.notes}>
-              <PricingNotes report={state.grid} locale={activeLocale} t={t} />
-              <DataSourceNotes report={state.grid} weeks={WINDOW_WEEKS} locale={activeLocale} t={t} />
-              {state.grid.unpricedRoutes.length === 0 ? null : (
-                <p className={css.warning} role="note">
-                  {t('unpriced', { list: state.grid.unpricedRoutes.join(', ') })}
-                </p>
-              )}
-            </footer>
+            {state.status === 'ready' ? (
+              <>
+                <SummaryStrip report={state.summary} t={t} money={money} tokens={tokens} integer={integer} />
+
+                <CalendarHeatmap
+                  from={gridFrom}
+                  to={gridTo}
+                  days={gridDays}
+                  totalCost={state.grid.totals.cost}
+                  peak={peak}
+                  t={t}
+                  formatCost={money}
+                  formatInteger={integer}
+                  formatDay={dateText}
+                  onSelectDay={setSelectedDay}
+                  {...returnDay === undefined ? {} : { focusDayOnMount: returnDay }}
+                />
+
+                <footer className={css.notes}>
+                  <PricingNotes report={state.grid} locale={activeLocale} t={t} />
+                  <DataSourceNotes report={state.grid} weeks={WINDOW_WEEKS} locale={activeLocale} t={t} />
+                  {state.grid.unpricedRoutes.length === 0 ? null : (
+                    <p className={css.warning} role="note">
+                      {t('unpriced', { list: state.grid.unpricedRoutes.join(', ') })}
+                    </p>
+                  )}
+                </footer>
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </PanelBoundary>
     </section>
   )

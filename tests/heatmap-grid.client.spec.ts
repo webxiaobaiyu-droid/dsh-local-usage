@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { dayKey, heatmapColumns, heatmapWindow, midnight, monthMarkers } from '../src/client/heatmap-grid.ts'
+import {
+  dayKey,
+  dayTime,
+  heatmapColumns,
+  heatmapWindow,
+  midnight,
+  monthMarkers,
+  weekdayKey,
+} from '../src/client/heatmap-grid.ts'
 
 const MS_PER_DAY = 86_400_000
 
@@ -80,5 +88,39 @@ describe('heatmapColumns', () => {
     expect(heatmapColumns(from, noon(2026, 9, 15))).toBe(1)
     expect(heatmapColumns(from, noon(2026, 9, 20))).toBe(1)
     expect(heatmapColumns(from, noon(2026, 9, 21))).toBe(2)
+  })
+})
+
+describe('dayTime', () => {
+  it('round-trips a day key through local midnight', () => {
+    for (const day of [noon(2026, 1, 1), noon(2026, 9, 19), noon(2026, 12, 31)]) {
+      expect(dayTime(dayKey(day))).toBe(midnight(day))
+    }
+  })
+
+  it('reads a bare day key as that local day, not as UTC', () => {
+    // Parsed as a date string, `2026-09-19` would mean UTC midnight and land on
+    // the previous local day anywhere west of Greenwich — which would put the
+    // day page's window one day off from the cell that opened it.
+    expect(dayTime('2026-09-19')).toBe(new Date(2026, 8, 19).getTime())
+    expect(dayKey(dayTime('2026-09-19') ?? 0)).toBe('2026-09-19')
+  })
+
+  it('rejects anything that is not a day key', () => {
+    for (const bad of ['', '2026-9-19', '2026-09-19T00:00:00Z', 'today', '2026-09-19 ']) {
+      expect({ bad, time: dayTime(bad) }).toEqual({ bad, time: undefined })
+    }
+  })
+})
+
+describe('weekdayKey', () => {
+  it('names the weekday Sunday-first', () => {
+    // 2026-09-20 is a Sunday, so this walks one full week from the gutter's top.
+    expect(Array.from({ length: 7 }, (_, offset) => weekdayKey(noon(2026, 9, 20 + offset))))
+      .toEqual(['wd.0', 'wd.1', 'wd.2', 'wd.3', 'wd.4', 'wd.5', 'wd.6'])
+  })
+
+  it('names a midweek day', () => {
+    expect(weekdayKey(noon(2026, 9, 19))).toBe('wd.6')
   })
 })

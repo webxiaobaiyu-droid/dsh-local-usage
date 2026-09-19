@@ -1,6 +1,6 @@
 /**
- * Calendar geometry: the rolling window, its column count, and the month
- * markers above it.
+ * Calendar day vocabulary: the rolling window, its column count, the month
+ * markers above it, and the day-key arithmetic the drill-down shares with it.
  *
  * Pure and date-in only, so the arithmetic that decides where every cell lands
  * is testable without a browser. The window opens on a Sunday and closes on the
@@ -9,10 +9,32 @@
  *
  * @module dsh-local-usage/client/heatmap-grid
  */
+/** Sunday-first dictionary keys for the long weekday names. */
+export declare const WEEKDAY_KEYS: readonly ["wd.0", "wd.1", "wd.2", "wd.3", "wd.4", "wd.5", "wd.6"];
+/** One of the seven long weekday dictionary keys. */
+export type WeekdayKey = typeof WEEKDAY_KEYS[number];
 /** Local midnight of one instant. */
 export declare function midnight(time: number): number;
 /** Local `YYYY-MM-DD` key for one instant. */
 export declare function dayKey(time: number): string;
+/**
+ * Local midnight of a `YYYY-MM-DD` day key — the inverse of {@link dayKey}.
+ *
+ * Built through the `Date` constructor's local-time overload rather than parsed
+ * as a date string, which would read a bare `YYYY-MM-DD` as UTC and shift the
+ * whole day for anyone west of Greenwich.
+ *
+ * @param day - the day key.
+ * @returns Unix epoch milliseconds of that local day's midnight, or `undefined`
+ * when the key is malformed.
+ */
+export declare function dayTime(day: string): number | undefined;
+/**
+ * Long weekday dictionary key for one instant.
+ * @param time - Unix epoch milliseconds.
+ * @returns the `wd.*` key naming that instant's weekday.
+ */
+export declare function weekdayKey(time: number): WeekdayKey;
 /**
  * Inclusive bounds of the calendar window: `weeks` whole columns ending with
  * the week that contains `now`, opening on a Sunday.

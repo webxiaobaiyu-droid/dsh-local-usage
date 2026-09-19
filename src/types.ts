@@ -7,6 +7,20 @@
  * @module dsh-local-usage/types
  */
 
+/**
+ * Project label used when a session header records no working directory.
+ *
+ * Not a stand-in for a missing value but a bucket of its own: those sessions
+ * did spend, and dropping them would make the project rows fail to add up to
+ * the total. It cannot collide with a real entry, because a working directory
+ * is absolute and this is not a path.
+ *
+ * Declared here rather than beside the fold because both halves read it: the
+ * browser half needs it to know that a row is a bucket rather than a
+ * directory, and it cannot import the fold, which is a host-only module.
+ */
+export const UNKNOWN_PROJECT = 'unknown'
+
 /** Disjoint provider-reported token buckets; `uncachedInputTokens` excludes cache traffic. */
 export interface UsageTokens {
   /** Prompt tokens the provider billed at the full input rate. */
@@ -41,6 +55,27 @@ export interface UsageModelRow extends UsageCosted {
   readonly route: string
   /** Whether a configured price rule matched this route. */
   readonly priced: boolean
+}
+
+/**
+ * Usage attributed to one working directory.
+ *
+ * A directory is what a reader means by "project": a session is created in one,
+ * it is what the harness itself groups session logs by on disk, and it is the
+ * only axis on which spend answers a question someone actually asks — which
+ * project did this day's tokens go to.
+ */
+export interface UsageProjectRow extends UsageCosted {
+  /**
+   * Absolute working directory the contributing sessions were created in, or
+   * `unknown` when their headers carried none.
+   *
+   * Only the path is sent: a name a reader recognises is the last segment of
+   * it, and shortening a path is presentation rather than data.
+   */
+  readonly path: string
+  /** Distinct sessions that contributed usage from this directory. */
+  readonly sessions: number
 }
 
 /** Usage attributed to one session. */
@@ -96,6 +131,8 @@ export interface UsageInsightsReport {
   readonly days: readonly UsageDayRow[]
   /** Per-route rows ordered by descending cost. */
   readonly models: readonly UsageModelRow[]
+  /** Per-working-directory rows over the requested window, ordered by descending cost. */
+  readonly projects: readonly UsageProjectRow[]
   /** Per-session rows ordered by descending cost. */
   readonly sessions: readonly UsageSessionRow[]
   /** Session logs this call folded successfully. */

@@ -18,11 +18,13 @@ import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { costOf, isPeakTime, selectRate } from './pricing.ts'
 import type { PeakWindow, PriceRate, PriceRule } from './pricing.ts'
+import { UNKNOWN_PROJECT } from './types.ts'
 import type {
   UsageCosted,
   UsageDayRow,
   UsageInsightsReport,
   UsageModelRow,
+  UsageProjectRow,
   UsageSessionRow,
   UsageTokens,
 } from './types.ts'
@@ -243,6 +245,11 @@ function costedOf(bucket: Bucket): UsageCosted {
 
 /**
  * Fold every session's samples into one priced report.
+ * The window is whatever the caller asked for, and every dimension is folded
+ * over that same window, so narrowing it to one day yields that day's totals,
+ * that day's routes and that day's projects from the samples the Host already
+ * holds. That is what makes a day drill-down a re-fold rather than a re-read.
+ *
  * @param inputs - per-session inputs, in any order.
  * @param options - rate card and peak schedule.
  * @param meta - host-supplied report facts.
@@ -256,12 +263,18 @@ export function buildReport(
   const totals = emptyBucket()
   const byDay = new Map<string, Bucket>()
   const byRoute = new Map<string, Bucket & { priced: boolean }>()
+  const byProject = new Map<string, Bucket>()
   const sessionRows: UsageSessionRow[] = []
   const unpricedRoutes = new Set<string>()
   let unpricedTokens = 0
 
   for (const input of inputs) {
     const sessionBucket = emptyBucket()
+    // One bucket per directory for the whole window. The per-day split is not
+    // pre-computed here: a drill-down asks the Host for one day's window, and
+    // this fold re-runs over the cached samples, so a day-by-project matrix
+    // would be width no caller reads.
+    const project = input.cwd ?? UNKNOWN_PROJECT
     let firstSampleTime: number | undefined
     let lastSampleTime: number | undefined
     for (const sample of input.samples) {
@@ -288,9 +301,18 @@ export function buildReport(
         routeBucket = { ...emptyBucket(), priced: matched }
         byRoute.set(sample.route, routeBucket)
       }
+      // Created only from inside the sample loop, so a directory that recorded
+      // no usage never earns a row: a session with no billable settlement is
+      // absent from the report rather than present and empty.
+      let projectBucket = byProject.get(project)
+      if (projectBucket === undefined) {
+        projectBucket = emptyBucket()
+        byProject.set(project, projectBucket)
+      }
 
       addSample(dayBucket, sample.tokens, cost, input.sessionId)
       addSample(routeBucket, sample.tokens, cost, input.sessionId)
+      addSample(projectBucket, sample.tokens, cost, input.sessionId)
       addSample(sessionBucket, sample.tokens, cost, input.sessionId)
       addSample(totals, sample.tokens, cost, input.sessionId)
 
@@ -331,6 +353,14 @@ export function buildReport(
     }))
     .sort((left, right) => right.cost - left.cost || right.outputTokens - left.outputTokens)
 
+  const projects: UsageProjectRow[] = [...byProject.entries()]
+    .map(([path, bucket]) => ({
+      path,
+      ...costedOf(bucket),
+      sessions: bucket.sessions.size,
+    }))
+    .sort((left, right) => right.cost - left.cost || right.outputTokens - left.outputTokens)
+
   sessionRows.sort((left, right) => right.cost - left.cost || right.updatedAt - left.updatedAt)
 
   return {
@@ -339,6 +369,7 @@ export function buildReport(
     totals: { ...costedOf(totals), sessions: totals.sessions.size },
     days,
     models,
+    projects,
     sessions: sessionRows,
     scannedSessions: inputs.length,
     unreadableSessions: meta.unreadableSessions,

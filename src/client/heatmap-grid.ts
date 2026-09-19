@@ -1,6 +1,6 @@
 /**
- * Calendar geometry: the rolling window, its column count, and the month
- * markers above it.
+ * Calendar day vocabulary: the rolling window, its column count, the month
+ * markers above it, and the day-key arithmetic the drill-down shares with it.
  *
  * Pure and date-in only, so the arithmetic that decides where every cell lands
  * is testable without a browser. The window opens on a Sunday and closes on the
@@ -13,6 +13,12 @@
 const MS_PER_DAY = 86_400_000
 const DAYS_PER_WEEK = 7
 
+/** Sunday-first dictionary keys for the long weekday names. */
+export const WEEKDAY_KEYS = ['wd.0', 'wd.1', 'wd.2', 'wd.3', 'wd.4', 'wd.5', 'wd.6'] as const
+
+/** One of the seven long weekday dictionary keys. */
+export type WeekdayKey = typeof WEEKDAY_KEYS[number]
+
 /** Local midnight of one instant. */
 export function midnight(time: number): number {
   const date = new Date(time)
@@ -23,6 +29,37 @@ export function midnight(time: number): number {
 export function dayKey(time: number): string {
   const date = new Date(time)
   return `${String(date.getFullYear())}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Local midnight of a `YYYY-MM-DD` day key — the inverse of {@link dayKey}.
+ *
+ * Built through the `Date` constructor's local-time overload rather than parsed
+ * as a date string, which would read a bare `YYYY-MM-DD` as UTC and shift the
+ * whole day for anyone west of Greenwich.
+ *
+ * @param day - the day key.
+ * @returns Unix epoch milliseconds of that local day's midnight, or `undefined`
+ * when the key is malformed.
+ */
+export function dayTime(day: string): number | undefined {
+  const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
+  if (matched === null) return undefined
+  const time = new Date(
+    Number(matched[1]),
+    Number(matched[2]) - 1,
+    Number(matched[3]),
+  ).getTime()
+  return Number.isFinite(time) ? time : undefined
+}
+
+/**
+ * Long weekday dictionary key for one instant.
+ * @param time - Unix epoch milliseconds.
+ * @returns the `wd.*` key naming that instant's weekday.
+ */
+export function weekdayKey(time: number): WeekdayKey {
+  return WEEKDAY_KEYS[new Date(time).getDay()] ?? 'wd.0'
 }
 
 /**

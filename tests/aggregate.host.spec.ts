@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildReport, localDayKey } from '../src/aggregate.ts'
 import type { PricingOptions, ReportMeta, SessionUsageInput } from '../src/aggregate.ts'
+import { UNKNOWN_PROJECT } from '../src/types.ts'
 import type { UsageTokens } from '../src/types.ts'
 
 /** Monday 2026-09-21, 05:00 UTC — 13:00 Beijing, between the peak windows. */
@@ -179,6 +180,7 @@ describe('buildReport', () => {
     })
     expect(report.days).toEqual([])
     expect(report.models).toEqual([])
+    expect(report.projects).toEqual([])
     expect(report.sessions).toEqual([])
     expect(report.unpricedRoutes).toEqual([])
     expect(report.cached).toBe(false)
@@ -192,5 +194,76 @@ describe('buildReport', () => {
     expect(report.days).toHaveLength(1)
     expect(report.days[0]?.cost).toBeCloseTo(3, 10)
     expect(report.totals.cost).toBeCloseTo(3, 10)
+  })
+})
+
+describe('project rows', () => {
+  it('splits a window by working directory, ranked by cost', () => {
+    const report = buildReport([
+      { ...session('a', [[OFF_PEAK, 'x/flash', tokens(1_000_000)]]), cwd: '/work/api' },
+      { ...session('b', [[OFF_PEAK, 'x/flash', tokens(3_000_000)]]), cwd: '/work/web' },
+      { ...session('c', [[OFF_PEAK, 'x/flash', tokens(500_000)]]), cwd: '/work/api' },
+    ], OPTIONS, META)
+
+    expect(report.projects.map(row => row.path)).toEqual(['/work/web', '/work/api'])
+    expect(report.projects[0]).toMatchObject({ cost: 3, calls: 1, sessions: 1 })
+    // Two sessions spent from one directory, so the row counts both.
+    expect(report.projects[1]).toMatchObject({ cost: 1.5, calls: 2, sessions: 2 })
+    expect(report.projects[1]?.uncachedInputTokens).toBe(1_500_000)
+  })
+
+  it('buckets sessions whose header named no directory', () => {
+    const report = buildReport([
+      session('a', [[OFF_PEAK, 'x/flash', tokens(1_000_000)]]),
+    ], OPTIONS, META)
+
+    expect(report.projects.map(row => row.path)).toEqual([UNKNOWN_PROJECT])
+    expect(report.projects[0]?.sessions).toBe(1)
+  })
+
+  it('adds up to the window total across every directory', () => {
+    const report = buildReport([
+      {
+        ...session('a', [[OFF_PEAK, 'x/flash', tokens(1_000_000)], [NEXT_DAY, 'x/flash', tokens(1_000_000)]]),
+        cwd: '/work/api',
+      },
+      { ...session('b', [[NEXT_DAY, 'x/flash', tokens(2_000_000)]]), cwd: '/work/web' },
+      session('c', [[OFF_PEAK, 'x/flash', tokens(500_000)]]),
+    ], OPTIONS, META)
+
+    const summed = report.projects.reduce((sum, row) => sum + row.cost, 0)
+    const summedCalls = report.projects.reduce((sum, row) => sum + row.calls, 0)
+    expect(summed).toBeCloseTo(report.totals.cost, 10)
+    expect(summedCalls).toBe(report.totals.calls)
+  })
+
+  it('gives a row only to a directory that actually spent', () => {
+    const report = buildReport([
+      { ...session('idle', []), cwd: '/work/unused' },
+      { ...session('busy', [[OFF_PEAK, 'x/flash', tokens(1_000_000)]]), cwd: '/work/api' },
+    ], OPTIONS, META)
+
+    expect(report.projects.map(row => row.path)).toEqual(['/work/api'])
+  })
+
+  it('folds the day window into the same project axis', () => {
+    const whole = buildReport([
+      {
+        ...session('a', [[OFF_PEAK, 'x/flash', tokens(1_000_000)], [NEXT_DAY, 'x/flash', tokens(4_000_000)]]),
+        cwd: '/work/api',
+      },
+    ], OPTIONS, META)
+    const oneDay = buildReport([
+      {
+        ...session('a', [[NEXT_DAY, 'x/flash', tokens(4_000_000)]]),
+        cwd: '/work/api',
+      },
+    ], OPTIONS, META)
+
+    // A drill-down is the same fold over a narrower window, not a second one.
+    expect(oneDay.projects).toHaveLength(1)
+    expect(oneDay.projects[0]?.path).toBe(whole.projects[0]?.path)
+    expect(oneDay.projects[0]?.cost).toBeCloseTo(4, 10)
+    expect(oneDay.projects[0]!.cost).toBeLessThan(whole.projects[0]!.cost)
   })
 })

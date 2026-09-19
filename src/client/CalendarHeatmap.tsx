@@ -13,14 +13,20 @@
  * and 90th percentiles), so the scale adapts to how the profile actually spends
  * instead of assuming a distribution.
  *
+ * Every cell is a button that opens that day's own page, so the calendar is a
+ * way in rather than only a picture of the year. The grid is one tab stop: the
+ * arrow keys walk it, Home and End jump within a week, and focus is tracked by
+ * (column, row) rather than by DOM offset because the last column stops at
+ * today and a plain index would run off its end.
+ *
  * @module dsh-local-usage/client/CalendarHeatmap
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UsageDayRow } from '../types.ts'
-import { dayKey, heatmapColumns, midnight, monthMarkers } from './heatmap-grid.ts'
+import { WEEKDAY_KEYS, dayKey, heatmapColumns, midnight, monthMarkers } from './heatmap-grid.ts'
 import { css } from './classes.ts'
 
 const MS_PER_DAY = 86_400_000
@@ -35,8 +41,6 @@ const TOOLTIP_HALF_WIDTH = 150
 /** Approximate card height; below this viewport offset the card flips under the cell. */
 const TOOLTIP_FLIP_ABOVE = 320
 
-/** Sunday-first weekday names, matching the `wd.*` dictionary keys. */
-const WEEKDAY_KEYS = ['wd.0', 'wd.1', 'wd.2', 'wd.3', 'wd.4', 'wd.5', 'wd.6'] as const
 /** Compact row gutter labels, matching the `wdShort.*` dictionary keys. */
 const WEEKDAY_SHORT_KEYS = ['wdShort.0', 'wdShort.1', 'wdShort.2', 'wdShort.3', 'wdShort.4', 'wdShort.5', 'wdShort.6'] as const
 
@@ -74,6 +78,16 @@ export interface CalendarHeatmapProps {
   readonly formatInteger: (value: number) => string
   /** Localized date formatter, for a day key rendered to a reader. */
   readonly formatDay: (day: string) => string
+  /** Open one day's own page. */
+  readonly onSelectDay: (day: string) => void
+  /**
+   * Day the grid should focus when it mounts.
+   *
+   * Set only when the reader is coming back from a day page, so the return trip
+   * puts them on the cell they left from. Left undefined on first mount, when
+   * stealing focus would be an interruption rather than a restoration.
+   */
+  readonly focusDayOnMount?: string
 }
 
 /** Tokens of one day row. */
@@ -134,7 +148,7 @@ function useResponsiveGrid(totalColumns: number): {
  */
 export function CalendarHeatmap({
   from, to, days, totalCost, peak, t,
-  formatCost, formatInteger, formatDay,
+  formatCost, formatInteger, formatDay, onSelectDay, focusDayOnMount,
 }: CalendarHeatmapProps): ReactNode {
   const [hover, setHover] = useState<Hover | undefined>(undefined)
 
@@ -173,6 +187,66 @@ export function CalendarHeatmap({
   // `first` is a Sunday, so dropping whole leading weeks keeps every remaining
   // column week-aligned; positions and markers both read from this start.
   const visibleStart = first + (totalColumns - visibleColumns) * WEEKDAY_ROWS * MS_PER_DAY
+
+  // Roving focus: the grid is a single tab stop and the arrow keys move within
+  // it, so exactly one cell is tabbable at a time. Navigation is expressed as
+  // (column, row) rather than as a DOM offset because the last column stops at
+  // today — an offset walk would step off its end into nothing.
+  const [focusCell, setFocusCell] = useState<string | undefined>(focusDayOnMount)
+  const cellsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (focusDayOnMount === undefined) return
+    cellsRef.current?.querySelector<HTMLButtonElement>(`[data-day="${focusDayOnMount}"]`)?.focus()
+  }, [focusDayOnMount])
+
+  const renderedDays = useMemo(() => {
+    const present = new Set<string>()
+    for (const week of grid.slice(-visibleColumns)) {
+      for (const cell of week) if (cell !== null) present.add(cell.day)
+    }
+    return present
+  }, [grid, visibleColumns])
+
+  // Today ends the grid, so it is always a rendered cell and always a valid
+  // fallback for a focus target the grid no longer holds.
+  const focusDay = focusCell !== undefined && renderedDays.has(focusCell) ? focusCell : dayKey(last)
+
+  /**
+   * The rendered day at one grid position.
+   *
+   * A short column is short at the *bottom* — the grid fills forward from its
+   * opening Sunday and stops at today — so a position past the end resolves to
+   * the nearest cell above it. That one rule gives the arrow keys their
+   * boundary behaviour on both axes: stepping down out of a short column stays
+   * put, and stepping right into one lands on its last day.
+   */
+  const dayAt = (column: number, row: number): string | undefined => {
+    const week = visible[column]
+    if (week === undefined) return undefined
+    for (let offset = 0; offset < WEEKDAY_ROWS; offset += 1) {
+      const probe = week[row - offset]
+      if (probe !== undefined && probe !== null) return probe.day
+    }
+    return undefined
+  }
+
+  /** Move the roving focus, and take real focus with it so the two cannot disagree. */
+  const moveFocus = (event: KeyboardEvent<HTMLButtonElement>, column: number, row: number): void => {
+    const target = event.key === 'ArrowLeft' ? dayAt(column - 1, row)
+      : event.key === 'ArrowRight' ? dayAt(column + 1, row)
+      : event.key === 'ArrowUp' ? dayAt(column, row - 1)
+      : event.key === 'ArrowDown' ? dayAt(column, row + 1)
+      : event.key === 'Home' ? dayAt(column, 0)
+      : event.key === 'End' ? dayAt(column, WEEKDAY_ROWS - 1)
+      : undefined
+    if (target === undefined) return
+    event.preventDefault()
+    setFocusCell(target)
+    // Focused here rather than in an effect: the tabIndex flip alone only takes
+    // effect on the next Tab press, which is not where the reader is looking.
+    cellsRef.current?.querySelector<HTMLButtonElement>(`[data-day="${target}"]`)?.focus()
+  }
 
   const markers = useMemo(
     () => monthMarkers(visibleStart, last, visibleColumns)
@@ -215,6 +289,7 @@ export function CalendarHeatmap({
               {WEEKDAY_SHORT_KEYS.map(key => <span key={key} className={css.weekday}>{t(key)}</span>)}
             </div>
             <div
+              ref={cellsRef}
               className={css.cells}
               role="grid"
               aria-label={t('calendar')}
@@ -222,57 +297,73 @@ export function CalendarHeatmap({
                 // Spans the whole track list: a grid item placed in the single
                 // label column would overflow its own track list to the right.
                 gridColumn: '2 / -1',
-                gridAutoFlow: 'column',
                 gridTemplateRows: `repeat(${String(WEEKDAY_ROWS)}, ${String(cellSize)}px)`,
                 gridTemplateColumns: `repeat(${String(visibleColumns)}, ${String(cellSize)}px)`,
                 gap: CELL_GAP,
               }}
             >
-              {visible.map((week, column) => week.map((cell, row) => {
-                if (cell === null) return null
-                const tokens = cell.row === undefined ? 0 : tokensOf(cell.row)
-                const level = tokens <= 0
-                  ? 0
-                  : tokens <= levels.t1 ? 1 : tokens <= levels.t2 ? 2 : tokens <= levels.t3 ? 3 : 4
-                const time = visibleStart + (column * WEEKDAY_ROWS + row) * MS_PER_DAY
-                const weekday = new Date(time).getDay()
-                // The accessible name carries the same figures the hover card
-                // shows, in full: a screen reader has no hover to fall back on,
-                // so a rounded count here would be the only count it ever gets.
-                const label = t('dayLabel', {
-                  day: formatDay(cell.day),
-                  weekday: t(WEEKDAY_KEYS[weekday] ?? 'wd.0'),
-                  cost: formatCost(cell.row?.cost ?? 0),
-                  tokens: formatInteger(tokens),
-                  calls: formatInteger(cell.row?.calls ?? 0),
-                })
-                return (
-                  <span
-                    key={cell.day}
-                    className={css.cell}
-                    data-level={level}
-                    role="gridcell"
-                    aria-label={label}
-                    style={{ inlineSize: cellSize, blockSize: cellSize }}
-                    onMouseEnter={(event) => {
-                      const rect = event.currentTarget.getBoundingClientRect()
-                      setHover({
-                        key: cell.day,
-                        weekday,
-                        row: cell.row,
-                        level,
-                        x: Math.min(
-                          Math.max(rect.left + rect.width / 2, TOOLTIP_HALF_WIDTH),
-                          window.innerWidth - TOOLTIP_HALF_WIDTH,
-                        ),
-                        y: rect.top,
-                        placement: rect.top < TOOLTIP_FLIP_ABOVE ? 'below' : 'above',
-                      })
-                    }}
-                    onMouseLeave={() => { setHover(undefined) }}
-                  />
-                )
-              }))}
+              {/* Row-major with every cell placed explicitly. A real grid row per
+               * weekday is what gives each cell a `row` owner in the
+               * accessibility tree, and positional focus needs a position to
+               * move from. The wrapper draws no box of its own. */}
+              {Array.from({ length: WEEKDAY_ROWS }, (_, row) => (
+                <div key={row} className={css.cellRow} role="row">
+                  {visible.map((week, column) => {
+                    const cell = week[row]
+                    if (cell === undefined || cell === null) return null
+                    const tokens = cell.row === undefined ? 0 : tokensOf(cell.row)
+                    const level = tokens <= 0
+                      ? 0
+                      : tokens <= levels.t1 ? 1 : tokens <= levels.t2 ? 2 : tokens <= levels.t3 ? 3 : 4
+                    // The grid opens on a Sunday and fills one row per weekday,
+                    // so the row index *is* the weekday.
+                    const label = t('dayLabel', {
+                      day: formatDay(cell.day),
+                      weekday: t(WEEKDAY_KEYS[row] ?? 'wd.0'),
+                      cost: formatCost(cell.row?.cost ?? 0),
+                      tokens: formatInteger(tokens),
+                      calls: formatInteger(cell.row?.calls ?? 0),
+                    })
+                    return (
+                      <button
+                        key={cell.day}
+                        type="button"
+                        className={css.cell}
+                        data-level={level}
+                        data-day={cell.day}
+                        role="gridcell"
+                        aria-label={label}
+                        tabIndex={cell.day === focusDay ? 0 : -1}
+                        style={{
+                          gridRowStart: row + 1,
+                          gridColumnStart: column + 1,
+                          inlineSize: cellSize,
+                          blockSize: cellSize,
+                        }}
+                        onFocus={() => { setFocusCell(cell.day) }}
+                        onKeyDown={(event) => { moveFocus(event, column, row) }}
+                        onClick={() => { onSelectDay(cell.day) }}
+                        onMouseEnter={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect()
+                          setHover({
+                            key: cell.day,
+                            weekday: row,
+                            row: cell.row,
+                            level,
+                            x: Math.min(
+                              Math.max(rect.left + rect.width / 2, TOOLTIP_HALF_WIDTH),
+                              window.innerWidth - TOOLTIP_HALF_WIDTH,
+                            ),
+                            y: rect.top,
+                            placement: rect.top < TOOLTIP_FLIP_ABOVE ? 'below' : 'above',
+                          })
+                        }}
+                        onMouseLeave={() => { setHover(undefined) }}
+                      />
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -42,6 +42,13 @@ export declare const zh: {
     peakDay: string;
     noUsage: string;
     noUsageDay: string;
+    back: string;
+    daySubtitle: string;
+    dayProjects: string;
+    dayEmpty: string;
+    projectColumn: string;
+    projects: string;
+    projectUnknown: string;
     unpriced: string;
     dataTitle: string;
     dataIntro: string;
@@ -130,6 +137,13 @@ export declare const en: {
     peakDay: string;
     noUsage: string;
     noUsageDay: string;
+    back: string;
+    daySubtitle: string;
+    dayProjects: string;
+    dayEmpty: string;
+    projectColumn: string;
+    projects: string;
+    projectUnknown: string;
     unpriced: string;
     dataTitle: string;
     dataIntro: string;

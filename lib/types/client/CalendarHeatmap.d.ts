@@ -13,6 +13,12 @@
  * and 90th percentiles), so the scale adapts to how the profile actually spends
  * instead of assuming a distribution.
  *
+ * Every cell is a button that opens that day's own page, so the calendar is a
+ * way in rather than only a picture of the year. The grid is one tab stop: the
+ * arrow keys walk it, Home and End jump within a week, and focus is tracked by
+ * (column, row) rather than by DOM offset because the last column stops at
+ * today and a plain index would run off its end.
+ *
  * @module dsh-local-usage/client/CalendarHeatmap
  */
 import { type ReactNode } from 'react';
@@ -38,10 +44,20 @@ export interface CalendarHeatmapProps {
     readonly formatInteger: (value: number) => string;
     /** Localized date formatter, for a day key rendered to a reader. */
     readonly formatDay: (day: string) => string;
+    /** Open one day's own page. */
+    readonly onSelectDay: (day: string) => void;
+    /**
+     * Day the grid should focus when it mounts.
+     *
+     * Set only when the reader is coming back from a day page, so the return trip
+     * puts them on the cell they left from. Left undefined on first mount, when
+     * stealing focus would be an interruption rather than a restoration.
+     */
+    readonly focusDayOnMount?: string;
 }
 /**
  * Render the calendar grid plus its legend and hover card.
  * @param props - the window, its day rows, the selected range, formatters, and copy.
  * @returns the calendar figure.
  */
-export declare function CalendarHeatmap({ from, to, days, totalCost, peak, t, formatCost, formatInteger, formatDay, }: CalendarHeatmapProps): ReactNode;
+export declare function CalendarHeatmap({ from, to, days, totalCost, peak, t, formatCost, formatInteger, formatDay, onSelectDay, focusDayOnMount, }: CalendarHeatmapProps): ReactNode;

@@ -307,14 +307,34 @@ export const styles = String.raw`
   display: grid;
 }
 
+/* The row wrappers exist for the accessibility tree and for explicit cell
+ * placement, not for layout: a box of their own would become a grid item and
+ * push every cell out of its track. */
+.dlu-cellRow {
+  display: contents;
+}
+
+/* Each cell is a button, so it has to shed the chrome it arrives with:
+ * padding, border and background would push the square off its track and paint
+ * over the heat step underneath it. */
 .dlu-cell {
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  appearance: none;
+  background: none;
+  border: 0;
   border-radius: 4px;
-  cursor: default;
   transition: transform 100ms ease-out;
 }
 
 .dlu-cell:hover {
   transform: scale(1.15);
+}
+
+.dlu-cell:focus-visible {
+  outline: 2px solid var(--dsw-alias-link);
+  outline-offset: 1px;
 }
 
 .dlu-cell[data-level='0'] {
@@ -395,6 +415,113 @@ export const styles = String.raw`
 
 .dlu-legendPeak {
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Day page ─────────────────────────────────────────────────────────── */
+
+/* The drill-down replaces the panel's whole contents, so it has to carry its
+ * own vertical rhythm: the panel's own gap now applies to a single child. */
+.dlu-dayDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* Focused when it opens, so a keyboard reader lands at the top of the new page
+ * rather than on a document body that no longer holds their cell. It is a page
+ * container, not a control, so it draws no ring of its own. */
+.dlu-dayDetail:focus {
+  outline: none;
+}
+
+.dlu-dayHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.dlu-dayTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.dlu-dayTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dlu-dayWeekday {
+  font-size: 12.5px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dlu-projectBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dlu-projectHeading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dlu-projectTable {
+  inline-size: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+
+.dlu-projectTable th {
+  padding: 0 0 6px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-caption);
+  text-align: left;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* Two classes deep so this outranks the header rule above, which sets a
+ * text-align of its own. */
+.dlu-projectTable .dlu-numeric {
+  text-align: right;
+}
+
+.dlu-projectTable td {
+  padding: 7px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.dlu-projectTable th.dlu-projectCell {
+  padding-right: 20px;
+  vertical-align: top;
+}
+
+.dlu-projectName {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The directory is context for the name above it, not the label: quiet, and
+ * allowed to break anywhere, because a path has no spaces to break at. */
+.dlu-projectPath {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--dsw-alias-label-caption);
+  overflow-wrap: anywhere;
 }
 
 /* ── Hover card ───────────────────────────────────────────────────────── */
@@ -672,6 +799,24 @@ export const styles = String.raw`
 
   .dlu-heroValue {
     font-size: 28px;
+  }
+
+  /* Six columns of figures on a phone: keep them, but tighten the type and the
+   * name column so the row still reads as one line. */
+  .dlu-dayTitle {
+    font-size: 17px;
+  }
+
+  .dlu-projectTable {
+    font-size: 11px;
+  }
+
+  .dlu-projectTable td {
+    padding: 5px 0;
+  }
+
+  .dlu-projectTable th.dlu-projectCell {
+    padding-right: 10px;
   }
 }
 
