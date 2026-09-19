@@ -31,6 +31,17 @@ kind: "package-reference"
 
 两半之间不需要额外接线：Host 半边自行注册 Fetch 路由，浏览器半边直接调用它，因此本包不会出现在产品的 Remote 装配中。
 
+### 安装
+
+```sh
+dsh plugin add git@github.com:webxiaobaiyu-droid/dsh-local-usage.git   # 从 GitHub 安装
+dsh plugin add /path/to/dsh-local-usage                               # 从本地目录安装
+```
+
+**插件 → 添加插件** 对话框接受同样这两种形式。
+
+本仓库把构建好的 `lib/` 与 `cordis.patch.yml` 一并入库，且不声明任何构建脚本，因此安装时不会在你的机器上执行代码，也不需要 git 依赖通常会要求的构建授权：加载的就是已入库的产物本身。`dsh plugin add` 会把 `dsh-local-usage` 追加到该 profile 的 bundle 列表，`dsh --profile <名称> --dump-config` 可以看到它贡献的那一行 `local-usage`。一行同时挂载两半：它加载 Host 半边，而由于 manifest 声明了 `dsh.client.platform: web`，同一行也是浏览器加载面板的依据。
+
 Host 半边还必须被 Client 装配选中：在 `packages/api/remotes/src/client/index.ts` 挂载其生成的 contribution 之前，新的 Remote 命名空间对浏览器不可见。
 
 ### 阅读页面
@@ -139,6 +150,8 @@ pnpm run link:host -- --src /path/to/deepseek-harness
 | `pnpm run typecheck` | 以两个程序分别类型检查两半 |
 | `pnpm run build` | 打包 `lib/*.js`，并产出 `lib/types` |
 | `pnpm run watch` | 只重建打包产物，用于热重载循环 |
+
+这里刻意**不提供 `prepare` 脚本**。`lib/` 已入库，而 git 依赖上的构建脚本恰恰会迫使每个安装者授予该包「在安装期执行代码」的权限；去掉它，安装才能直接使用入库产物、不索取任何权限。改动 `src/` 后请自行运行 `pnpm run build` 并提交产物。
 
 ### Dev Note
 

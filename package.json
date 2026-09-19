@@ -22,18 +22,28 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
-      "platform": "web"
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
     }
   },
   "files": [
-    "lib"
+    "lib",
+    "cordis.patch.yml"
   ],
   "scripts": {
-    "prepare": "tsdown",
     "build": "tsdown && npm run build:types",
     "build:types": "tsc -p tsconfig.host.build.json && tsc -p tsconfig.client.build.json",
     "link:host": "node scripts/link-host-packages.mjs",

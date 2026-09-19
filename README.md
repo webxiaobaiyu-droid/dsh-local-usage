@@ -31,6 +31,17 @@ Select **Usage** in the sidebar to open the panel. Mount `dsh-local-usage` in a 
 
 Nothing else has to be wired for the two halves to meet: the Host half registers its own Fetch route and the browser half calls it, so this package never appears in the product's Remote assembly.
 
+### Install
+
+```sh
+dsh plugin add git@github.com:webxiaobaiyu-droid/dsh-local-usage.git   # from GitHub
+dsh plugin add /path/to/dsh-local-usage                               # from a local checkout
+```
+
+The plugin manager behind **Plugins → Add plugin** takes the same two forms.
+
+This package ships its built `lib/` and its `cordis.patch.yml` in the repository, and declares no build script, so an install never runs code on your machine and never asks for the build permission a git dependency would otherwise need: what loads is exactly the committed artifact. `dsh plugin add` appends `dsh-local-usage` to the profile's bundle list, and `dsh --profile <name> --dump-config` shows the single `local-usage` row it contributes. One row mounts both halves: it loads the Host half, and because the manifest declares `dsh.client.platform: web`, that same row is what makes the browser load the panel.
+
 ### Reading the page
 
 Select **Usage** in the sidebar to open the panel. It is a global panel, so it belongs to the profile rather than to one Session and stays available while you switch conversations.
@@ -139,6 +150,8 @@ pnpm run link:host -- --src /path/to/deepseek-harness
 | `pnpm run typecheck` | typechecks the two halves as two programs |
 | `pnpm run build` | bundles `lib/*.js`, then emits `lib/types` |
 | `pnpm run watch` | rebuilds the bundles only, for a reload loop |
+
+There is deliberately **no `prepare` script**. `lib/` is committed, and a build script on a git dependency is exactly what forces every installer to grant the package permission to execute code at install time; dropping it is what lets an install use the committed artifact and ask for nothing. Run `pnpm run build` yourself after changing `src/` and commit the result.
 
 ### Dev Note
 

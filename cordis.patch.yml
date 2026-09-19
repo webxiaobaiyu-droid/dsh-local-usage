@@ -1,0 +1,13 @@
+# The dsh-local-usage bundle patch: one Loader row for this package.
+#
+# One row serves both halves. The row mounts the Host half (`main`), and because
+# this package's manifest declares `dsh.client.platform: web`, that same row is
+# what the client module table scans to find the browser half behind
+# `exports["./client"]` — a package no row mounts never reaches the browser.
+#
+# The row carries no `config`: every field has a default, and a deployment that
+# wants different rates overrides this row by id in its own profile patch.
+
+- insert:
+    - id: local-usage
+      name: 'dsh-local-usage'
