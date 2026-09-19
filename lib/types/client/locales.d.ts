@@ -1,4 +1,15 @@
-/** Copy dictionaries for the Usage Statistics Settings page. */
+/**
+ * Copy dictionaries for the Usage statistics panel.
+ *
+ * Every user-visible string on the panel lives here, in both shipped locales:
+ * the panel renders no literal of its own, so adding a language is a dictionary
+ * registration rather than a component change. Figures are not copy, so they
+ * are formatted by `format.ts` against the active locale instead — a translated
+ * string wraps a number, it never renders one.
+ *
+ * Placeholders are `{name}`; the locale runtime substitutes them by name and
+ * leaves an unknown name in place, so a template's contract is its own keys.
+ */
 /** Simplified Chinese dictionary and key source of truth. */
 export declare const zh: {
     nav: string;
@@ -63,6 +74,7 @@ export declare const zh: {
     pricingColumnOutput: string;
     pricingUnknownRoute: string;
     pricingPeakSchedule: string;
+    listSeparator: string;
     pricingWeekdaysOnly: string;
     pricingEveryDay: string;
     peakNote: string;
@@ -150,6 +162,7 @@ export declare const en: {
     pricingColumnOutput: string;
     pricingUnknownRoute: string;
     pricingPeakSchedule: string;
+    listSeparator: string;
     pricingWeekdaysOnly: string;
     pricingEveryDay: string;
     peakNote: string;

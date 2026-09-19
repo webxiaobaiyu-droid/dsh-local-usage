@@ -19,7 +19,9 @@ import type { UsageInsightsReport } from '../types.ts';
  * @param props - the report whose rates are in effect, the dictionary, and the open state.
  * @returns the disclosure block.
  */
-export declare function PricingNotes({ report, t }: {
+export declare function PricingNotes({ report, locale, t }: {
     readonly report: UsageInsightsReport;
+    /** Active locale id; rate figures are written in the reader's language. */
+    readonly locale: string;
     readonly t: PropsLocale<'usage'>['t'];
 }): ReactNode;

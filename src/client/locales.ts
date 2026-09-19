@@ -1,4 +1,15 @@
-/** Copy dictionaries for the Usage Statistics Settings page. */
+/**
+ * Copy dictionaries for the Usage statistics panel.
+ *
+ * Every user-visible string on the panel lives here, in both shipped locales:
+ * the panel renders no literal of its own, so adding a language is a dictionary
+ * registration rather than a component change. Figures are not copy, so they
+ * are formatted by `format.ts` against the active locale instead — a translated
+ * string wraps a number, it never renders one.
+ *
+ * Placeholders are `{name}`; the locale runtime substitutes them by name and
+ * leaves an unknown name in place, so a template's contract is its own keys.
+ */
 
 /** Simplified Chinese dictionary and key source of truth. */
 export const zh = {
@@ -29,7 +40,7 @@ export const zh = {
   calendarWindow: '近 52 周',
   legendLess: '少',
   legendMore: '多',
-  peakDay: '单日最高',
+  peakDay: '单日最高 {day} · {cost}',
   noUsage: '这个范围内没有用量记录。',
   noUsageDay: '当天没有用量记录',
   unpriced: '未配置价格的模型，已按默认费率估算：{list}',
@@ -64,6 +75,9 @@ export const zh = {
   pricingColumnOutput: '输出',
   pricingUnknownRoute: 'unknown 表示日志中没有记录 provider/model 的调用；multiple 表示一轮里换了多个模型。',
   pricingPeakSchedule: '高峰时段：{windows}（北京时间，周{weekdayScope}），其余为空闲时段，费率为高峰的 1/{multiplier}。',
+  // Joins the peak windows into the schedule sentence above. Punctuation is
+  // copy: English separates list items with a comma, Chinese with a wave dash.
+  listSeparator: '、',
   pricingWeekdaysOnly: '一至周五',
   pricingEveryDay: '一至周日',
   peakNote: '高峰时段费率 ×{multiplier}',
@@ -77,13 +91,15 @@ export const zh = {
   'wd.4': '周四',
   'wd.5': '周五',
   'wd.6': '周六',
+  // The gutter is one glyph per row, so the short names are the weekday
+  // numerals rather than the `周X` forms the tooltip uses.
   'wdShort.0': '日',
-  'wdShort.1': '1',
-  'wdShort.2': '2',
-  'wdShort.3': '3',
-  'wdShort.4': '4',
-  'wdShort.5': '5',
-  'wdShort.6': '6',
+  'wdShort.1': '一',
+  'wdShort.2': '二',
+  'wdShort.3': '三',
+  'wdShort.4': '四',
+  'wdShort.5': '五',
+  'wdShort.6': '六',
 } satisfies Record<string, string>
 
 /** Usage Statistics locale key union. */
@@ -118,7 +134,7 @@ export const en = {
   calendarWindow: 'Last 52 weeks',
   legendLess: 'Less',
   legendMore: 'More',
-  peakDay: 'Highest day',
+  peakDay: 'Highest day {day} · {cost}',
   noUsage: 'No usage recorded in this range.',
   noUsageDay: 'No usage recorded',
   unpriced: 'No price configured for these models; the default rate was used: {list}',
@@ -153,6 +169,7 @@ export const en = {
   pricingColumnOutput: 'Output',
   pricingUnknownRoute: 'unknown means the log recorded no provider/model for the call; multiple means one turn switched models.',
   pricingPeakSchedule: 'Peak: {windows} (Beijing time, {weekdayScope}); every other hour is off-peak, charged 1/{multiplier} of the peak rate.',
+  listSeparator: ', ',
   pricingWeekdaysOnly: 'Monday to Friday',
   pricingEveryDay: 'every day',
   peakNote: 'Peak-hour rates are ×{multiplier}',

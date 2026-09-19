@@ -70,8 +70,10 @@ export interface CalendarHeatmapProps {
   readonly t: PropsLocale<'usage'>['t']
   /** Currency formatter owned by the panel. */
   readonly formatCost: (value: number) => string
-  /** Token formatter owned by the panel. */
-  readonly formatTokens: (value: number) => string
+  /** Full integer formatter: every figure the calendar shows is a drill-down one. */
+  readonly formatInteger: (value: number) => string
+  /** Localized date formatter, for a day key rendered to a reader. */
+  readonly formatDay: (day: string) => string
 }
 
 /** Tokens of one day row. */
@@ -131,7 +133,8 @@ function useResponsiveGrid(totalColumns: number): {
  * @returns the calendar figure.
  */
 export function CalendarHeatmap({
-  from, to, days, totalCost, peak, t, formatCost, formatTokens,
+  from, to, days, totalCost, peak, t,
+  formatCost, formatInteger, formatDay,
 }: CalendarHeatmapProps): ReactNode {
   const [hover, setHover] = useState<Hover | undefined>(undefined)
 
@@ -233,12 +236,15 @@ export function CalendarHeatmap({
                   : tokens <= levels.t1 ? 1 : tokens <= levels.t2 ? 2 : tokens <= levels.t3 ? 3 : 4
                 const time = visibleStart + (column * WEEKDAY_ROWS + row) * MS_PER_DAY
                 const weekday = new Date(time).getDay()
+                // The accessible name carries the same figures the hover card
+                // shows, in full: a screen reader has no hover to fall back on,
+                // so a rounded count here would be the only count it ever gets.
                 const label = t('dayLabel', {
-                  day: cell.day,
+                  day: formatDay(cell.day),
                   weekday: t(WEEKDAY_KEYS[weekday] ?? 'wd.0'),
                   cost: formatCost(cell.row?.cost ?? 0),
-                  tokens: formatTokens(tokens),
-                  calls: String(cell.row?.calls ?? 0),
+                  tokens: formatInteger(tokens),
+                  calls: formatInteger(cell.row?.calls ?? 0),
                 })
                 return (
                   <span
@@ -282,7 +288,7 @@ export function CalendarHeatmap({
         </span>
         {peak === undefined ? null : (
           <span className={css.legendPeak}>
-            {`${t('peakDay')} ${peak.day} · ${formatCost(peak.cost)}`}
+            {t('peakDay', { day: formatDay(peak.day), cost: formatCost(peak.cost) })}
           </span>
         )}
       </div>
@@ -297,7 +303,7 @@ export function CalendarHeatmap({
           style={{ left: hover.x, top: hover.placement === 'above' ? hover.y : hover.y + cellSize + 8 }}
         >
           <div className={css.tooltipHead}>
-            <span className={css.tooltipDate}>{hover.key}</span>
+            <span className={css.tooltipDate}>{formatDay(hover.key)}</span>
             <span className={css.tooltipWeekday}>{t(WEEKDAY_KEYS[hover.weekday] ?? 'wd.0')}</span>
           </div>
           {hover.row === undefined ? (
@@ -312,23 +318,23 @@ export function CalendarHeatmap({
               <dl className={css.tooltipRows}>
                 <div>
                   <dt>{t('totalTokens')}</dt>
-                  <dd>{formatTokens(tokensOf(hover.row))}</dd>
+                  <dd>{formatInteger(tokensOf(hover.row))}</dd>
                 </div>
                 <div>
                   <dt>{t('inputTokens')}</dt>
-                  <dd>{formatTokens(hover.row.uncachedInputTokens)}</dd>
+                  <dd>{formatInteger(hover.row.uncachedInputTokens)}</dd>
                 </div>
                 <div>
                   <dt>{t('outputTokens')}</dt>
-                  <dd>{formatTokens(hover.row.outputTokens)}</dd>
+                  <dd>{formatInteger(hover.row.outputTokens)}</dd>
                 </div>
                 <div>
                   <dt>{t('cacheRead')}</dt>
-                  <dd>{formatTokens(hover.row.cacheReadTokens)}</dd>
+                  <dd>{formatInteger(hover.row.cacheReadTokens)}</dd>
                 </div>
                 <div>
                   <dt>{t('calls')}</dt>
-                  <dd>{String(hover.row.calls)}</dd>
+                  <dd>{formatInteger(hover.row.calls)}</dd>
                 </div>
               </dl>
             </>

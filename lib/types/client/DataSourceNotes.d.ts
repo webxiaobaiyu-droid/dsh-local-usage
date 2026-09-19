@@ -19,9 +19,11 @@ import type { UsageInsightsReport } from '../types.ts';
  * @param props - the report's live counts, the host facts, the calendar window, and the dictionary.
  * @returns the disclosure block.
  */
-export declare function DataSourceNotes({ report, weeks, t }: {
+export declare function DataSourceNotes({ report, weeks, locale, t }: {
     readonly report: UsageInsightsReport;
     /** Week columns the calendar spans, stated so the window is not a guess. */
     readonly weeks: number;
+    /** Active locale id; the counts below are grouped the reader's way. */
+    readonly locale: string;
     readonly t: PropsLocale<'usage'>['t'];
 }): ReactNode;

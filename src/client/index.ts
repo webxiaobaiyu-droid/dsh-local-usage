@@ -83,6 +83,11 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   const injected = (): UsagePanelInjected => ({
     panelId: PANEL_ID,
+    // Read through the service on every call rather than captured once: the
+    // panel formats figures during render, and the renderer re-renders this
+    // entry whenever the locale revision moves, so the id it reads is always
+    // the one the dictionary around it was resolved from.
+    locale: () => ctx.locale.getLocale().active,
     report: async (refresh, from, to) => {
       const url = new URL(REPORT_PATH, window.location.origin)
       url.searchParams.set('from', String(from))

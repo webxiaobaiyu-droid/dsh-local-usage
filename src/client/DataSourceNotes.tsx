@@ -15,6 +15,7 @@
 import type { ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UsageInsightsReport } from '../types.ts'
+import { formatInteger } from './format.ts'
 import { css } from './classes.ts'
 
 /** One labelled fact inside the disclosure. */
@@ -32,17 +33,19 @@ function Fact({ label, children }: { readonly label: string; readonly children: 
  * @param props - the report's live counts, the host facts, the calendar window, and the dictionary.
  * @returns the disclosure block.
  */
-export function DataSourceNotes({ report, weeks, t }: {
+export function DataSourceNotes({ report, weeks, locale, t }: {
   readonly report: UsageInsightsReport
   /** Week columns the calendar spans, stated so the window is not a guess. */
   readonly weeks: number
+  /** Active locale id; the counts below are grouped the reader's way. */
+  readonly locale: string
   readonly t: PropsLocale<'usage'>['t']
 }): ReactNode {
   const counts = t('dataCounts', {
-    count: String(report.scannedSessions),
+    count: formatInteger(report.scannedSessions, locale),
     unreadable: report.unreadableSessions === 0
       ? ''
-      : t('unreadableNote', { count: String(report.unreadableSessions) }),
+      : t('unreadableNote', { count: formatInteger(report.unreadableSessions, locale) }),
     source: report.cached ? t('dataCountsCached') : t('dataCountsFresh'),
   })
   return (

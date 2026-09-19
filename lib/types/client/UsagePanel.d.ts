@@ -10,6 +10,12 @@
  * Everything is fetched per session fold the Host already cached, so switching
  * ranges re-prices instead of re-reading logs.
  *
+ * The panel owns no copy and no formatting of its own: sentences come from the
+ * `usage` dictionary and figures from `format.ts`, both resolved against the
+ * active locale. A locale switch therefore costs one re-render and re-reads
+ * nothing, because the Host's report is language-neutral — it carries counts
+ * and a day key, never a rendered string.
+ *
  * @module dsh-local-usage/client/UsagePanel
  */
 import { type ReactNode } from 'react';
@@ -20,6 +26,16 @@ import type { UsageInsightsReport } from '../types.ts';
 export interface UsagePanelInjected {
     /** Key this panel occupies in the main column, matching the sidebar entry. */
     panelId: MainPanelId;
+    /**
+     * Active locale id, read at call time.
+     *
+     * The dictionary seat covers copy, but not figures: number, currency and date
+     * formatting are properties of the reader's language and have no key to hang
+     * off. The renderer re-derives the dictionary function from the locale
+     * revision, so a locale switch already re-renders this panel — reading the id
+     * during render is enough, and needs no subscription of its own.
+     */
+    locale: () => string;
     /** Assemble the report; `refresh` discards the Host's per-session fold cache. */
     report: (refresh: boolean, from: number, to: number) => Promise<UsageInsightsReport>;
 }
@@ -30,4 +46,4 @@ export type UsagePanelProps = PropsRuntime<'main'> & PropsLocale<'usage'> & Inje
  * @param props - panel runtime, dictionary, and the injected report reader.
  * @returns the panel content.
  */
-export declare function UsagePanel({ panelId, report, t, usePanelInfo }: UsagePanelProps): ReactNode;
+export declare function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePanelProps): ReactNode;

@@ -10,6 +10,12 @@
  * Everything is fetched per session fold the Host already cached, so switching
  * ranges re-prices instead of re-reading logs.
  *
+ * The panel owns no copy and no formatting of its own: sentences come from the
+ * `usage` dictionary and figures from `format.ts`, both resolved against the
+ * active locale. A locale switch therefore costs one re-render and re-reads
+ * nothing, because the Host's report is language-neutral — it carries counts
+ * and a day key, never a rendered string.
+ *
  * @module dsh-local-usage/client/UsagePanel
  */
 
@@ -22,6 +28,7 @@ import { CalendarHeatmap } from './CalendarHeatmap.tsx'
 import { heatmapWindow } from './heatmap-grid.ts'
 import { DataSourceNotes } from './DataSourceNotes.tsx'
 import { PricingNotes } from './PricingNotes.tsx'
+import { formatCost, formatDay, formatInteger, formatTokens } from './format.ts'
 import type { UsageInsightsLocaleKey } from './locales.ts'
 import { css } from './classes.ts'
 
@@ -42,6 +49,16 @@ const RANGES: readonly { readonly id: string; readonly key: UsageInsightsLocaleK
 export interface UsagePanelInjected {
   /** Key this panel occupies in the main column, matching the sidebar entry. */
   panelId: MainPanelId
+  /**
+   * Active locale id, read at call time.
+   *
+   * The dictionary seat covers copy, but not figures: number, currency and date
+   * formatting are properties of the reader's language and have no key to hang
+   * off. The renderer re-derives the dictionary function from the locale
+   * revision, so a locale switch already re-renders this panel — reading the id
+   * during render is enough, and needs no subscription of its own.
+   */
+  locale: () => string
   /** Assemble the report; `refresh` discards the Host's per-session fold cache. */
   report: (refresh: boolean, from: number, to: number) => Promise<UsageInsightsReport>
 }
@@ -65,49 +82,6 @@ type ViewState =
     /** The selected range: the summary figures. */
     readonly summary: UsageInsightsReport
   }
-
-const costFormatters = new Map<string, Intl.NumberFormat>()
-
-/** Currency formatter for one currency and fraction width, or `undefined` for a non-ISO currency. */
-function costFormatter(currency: string, digits: number): Intl.NumberFormat | undefined {
-  const cacheKey = `${currency}\0${String(digits)}`
-  const cached = costFormatters.get(cacheKey)
-  if (cached !== undefined) return cached
-  try {
-    const formatter = new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
-    })
-    costFormatters.set(cacheKey, formatter)
-    return formatter
-  } catch {
-    // A configured currency that is not an ISO code is the operator's choice,
-    // not a defect: fall back to a plain suffix rather than failing the panel.
-    return undefined
-  }
-}
-
-/** Format one money figure, widening precision so sub-cent days do not read as zero. */
-function formatCost(value: number, currency: string): string {
-  const magnitude = Math.abs(value)
-  const digits = magnitude === 0 ? 2 : magnitude < 0.01 ? 4 : magnitude < 1 ? 3 : 2
-  const formatter = costFormatter(currency, digits)
-  return formatter === undefined ? `${currency} ${value.toFixed(digits)}` : formatter.format(value)
-}
-
-/** Drop trailing zeros from a fixed-point figure. */
-function trim(value: number, digits: number): string {
-  return value.toFixed(digits).replace(/\.?0+$/, '')
-}
-
-/** Compact token count; the exact number lives in the calendar's hover card. */
-function formatTokens(value: number): string {
-  if (value < 1000) return String(Math.round(value))
-  if (value < 1_000_000) return `${trim(value / 1000, 1)}K`
-  return `${trim(value / 1_000_000, 2)}M`
-}
 
 /** Local midnight of one instant. */
 function startOfDay(time: number): number {
@@ -200,7 +174,7 @@ function tokensOf(row: UsageDayRow): number {
  * @param props - panel runtime, dictionary, and the injected report reader.
  * @returns the panel content.
  */
-export function UsagePanel({ panelId, report, t, usePanelInfo }: UsagePanelProps): ReactNode {
+export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePanelProps): ReactNode {
   const [rangeId, setRangeId] = useState('month')
   const [request, setRequest] = useState(0)
   const [state, setState] = useState<ViewState>({ status: 'idle' })
@@ -238,8 +212,14 @@ export function UsagePanel({ panelId, report, t, usePanelInfo }: UsagePanelProps
     return () => { current = false }
   }, [active, report, request, gridFrom, gridTo, rangeFrom, rangeTo, rangeIsWindow])
 
+  // Read per render, never memoized: the locale id is an input to every figure
+  // below, and the panel re-renders on a locale switch because its dictionary
+  // function is re-derived from the locale revision.
+  const activeLocale = locale()
   const currency = state.status === 'ready' ? state.grid.currency : 'CNY'
-  const money = (value: number): string => formatCost(value, currency)
+  const money = (value: number): string => formatCost(value, currency, activeLocale)
+  const tokens = (value: number): string => formatTokens(value, activeLocale)
+  const integer = (value: number): string => formatInteger(value, activeLocale)
 
   const gridDays = state.status === 'ready' ? state.grid.days : []
   const peak = gridDays.reduce<UsageDayRow | undefined>(
@@ -298,7 +278,7 @@ export function UsagePanel({ panelId, report, t, usePanelInfo }: UsagePanelProps
 
         {state.status === 'ready' ? (
           <>
-            <SummaryStrip report={state.summary} t={t} money={money} />
+            <SummaryStrip report={state.summary} t={t} money={money} tokens={tokens} integer={integer} />
 
             <CalendarHeatmap
               from={gridFrom}
@@ -308,12 +288,13 @@ export function UsagePanel({ panelId, report, t, usePanelInfo }: UsagePanelProps
               peak={peak}
               t={t}
               formatCost={money}
-              formatTokens={formatTokens}
+              formatInteger={(value: number): string => formatInteger(value, activeLocale)}
+              formatDay={(day: string): string => formatDay(day, activeLocale)}
             />
 
             <footer className={css.notes}>
-              <PricingNotes report={state.grid} t={t} />
-              <DataSourceNotes report={state.grid} weeks={WINDOW_WEEKS} t={t} />
+              <PricingNotes report={state.grid} locale={activeLocale} t={t} />
+              <DataSourceNotes report={state.grid} weeks={WINDOW_WEEKS} locale={activeLocale} t={t} />
               {state.grid.unpricedRoutes.length === 0 ? null : (
                 <p className={css.warning} role="note">
                   {t('unpriced', { list: state.grid.unpricedRoutes.join(', ') })}
@@ -328,10 +309,12 @@ export function UsagePanel({ panelId, report, t, usePanelInfo }: UsagePanelProps
 }
 
 /** The selected range's figures: one hero number, then the supporting tiles. */
-function SummaryStrip({ report, t, money }: {
+function SummaryStrip({ report, t, money, tokens, integer }: {
   readonly report: UsageInsightsReport
   readonly t: Translate
   readonly money: (value: number) => string
+  readonly tokens: (value: number) => string
+  readonly integer: (value: number) => string
 }): ReactNode {
   const { totals } = report
   const rangeTokens = report.days.reduce((sum, day) => sum + tokensOf(day), 0)
@@ -345,16 +328,16 @@ function SummaryStrip({ report, t, money }: {
           : <span className={css.heroDetail}>{t('peakNote', { multiplier: String(report.peakMultiplier) })}</span>}
       </div>
       <div className={css.tiles}>
-        <Tile value={formatTokens(rangeTokens)} label={t('totalTokens')} />
-        <Tile value={formatTokens(totals.uncachedInputTokens)} label={t('inputTokens')} />
-        <Tile value={formatTokens(totals.outputTokens)} label={t('outputTokens')} />
+        <Tile value={tokens(rangeTokens)} label={t('totalTokens')} />
+        <Tile value={tokens(totals.uncachedInputTokens)} label={t('inputTokens')} />
+        <Tile value={tokens(totals.outputTokens)} label={t('outputTokens')} />
         <Tile
-          value={formatTokens(totals.cacheReadTokens)}
+          value={tokens(totals.cacheReadTokens)}
           label={t('cacheRead')}
-          detail={`${t('cacheWrite')} ${formatTokens(totals.cacheWriteTokens)}`}
+          detail={`${t('cacheWrite')} ${tokens(totals.cacheWriteTokens)}`}
         />
-        <Tile value={String(totals.calls)} label={t('calls')} />
-        <Tile value={String(totals.sessions)} label={t('sessions')} />
+        <Tile value={integer(totals.calls)} label={t('calls')} />
+        <Tile value={integer(totals.sessions)} label={t('sessions')} />
       </div>
       {totals.calls === 0 ? <p className={css.empty}>{t('noUsage')}</p> : null}
     </section>

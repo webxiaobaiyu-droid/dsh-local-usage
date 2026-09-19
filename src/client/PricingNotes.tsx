@@ -15,28 +15,23 @@
 import type { ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UsageInsightsReport, UsagePriceRow } from '../types.ts'
+import { formatRate } from './format.ts'
 import { css } from './classes.ts'
 
-/** Format one rate with enough precision to stay readable at sub-cent values. */
-function rate(value: number): string {
-  if (value === 0) return '0'
-  if (value < 0.01) return String(value)
-  return String(Math.round(value * 1000) / 1000)
-}
-
 /** One rate card row. */
-function PriceRow({ row, label, currency }: {
+function PriceRow({ row, label, currency, locale }: {
   readonly row: UsagePriceRow
   readonly label: string
   readonly currency: string
+  readonly locale: string
 }): ReactNode {
   return (
     <tr>
       <td><code className={css.priceMatch}>{label}</code></td>
-      <td className={css.numeric}>{rate(row.input)}</td>
-      <td className={css.numeric}>{rate(row.cacheRead)}</td>
-      <td className={css.numeric}>{rate(row.cacheWrite)}</td>
-      <td className={css.numeric}>{rate(row.output)}</td>
+      <td className={css.numeric}>{formatRate(row.input, locale)}</td>
+      <td className={css.numeric}>{formatRate(row.cacheRead, locale)}</td>
+      <td className={css.numeric}>{formatRate(row.cacheWrite, locale)}</td>
+      <td className={css.numeric}>{formatRate(row.output, locale)}</td>
       <td className={css.priceCurrency}>{currency}</td>
     </tr>
   )
@@ -47,21 +42,27 @@ function PriceRow({ row, label, currency }: {
  * @param props - the report whose rates are in effect, the dictionary, and the open state.
  * @returns the disclosure block.
  */
-export function PricingNotes({ report, t }: {
+export function PricingNotes({ report, locale, t }: {
   readonly report: UsageInsightsReport
+  /** Active locale id; rate figures are written in the reader's language. */
+  readonly locale: string
   readonly t: PropsLocale<'usage'>['t']
 }): ReactNode {
-  const schedule = t('pricingPeakSchedule', {
-    windows: report.peakWindows.length === 0 ? '—' : report.peakWindows.join('、'),
-    weekdayScope: report.peakWeekdaysOnly ? t('pricingWeekdaysOnly') : t('pricingEveryDay'),
-    multiplier: String(report.peakMultiplier),
-  })
+  // Resolved only when it will be rendered: an empty window list drops the
+  // sentence outright rather than filling it with a placeholder.
+  const schedule = report.peakWindows.length === 0
+    ? undefined
+    : t('pricingPeakSchedule', {
+      windows: report.peakWindows.join(t('listSeparator')),
+      weekdayScope: report.peakWeekdaysOnly ? t('pricingWeekdaysOnly') : t('pricingEveryDay'),
+      multiplier: String(report.peakMultiplier),
+    })
   return (
     <details className={css.disclosure}>
       <summary className={css.disclosureSummary}>{t('pricingTitle')}</summary>
       <div className={css.disclosureBody}>
         <p>{t('pricingFormula')}</p>
-        {report.peakWindows.length === 0 ? null : <p>{schedule}</p>}
+        {schedule === undefined ? null : <p>{schedule}</p>}
         <p>{t('pricingSource')}</p>
         <p className={css.pricingCaveat}>{t('pricingNotBill')}</p>
         {report.prices.length === 0 ? null : (
@@ -80,12 +81,19 @@ export function PricingNotes({ report, t }: {
           </thead>
           <tbody>
             {report.prices.map(row => (
-              <PriceRow key={row.match} row={row} label={row.match} currency={report.currency} />
+              <PriceRow
+                key={row.match}
+                row={row}
+                label={row.match}
+                currency={report.currency}
+                locale={locale}
+              />
             ))}
             <PriceRow
               row={report.fallbackPrice}
               label={t('pricingFallback')}
               currency={report.currency}
+              locale={locale}
             />
           </tbody>
         </table>

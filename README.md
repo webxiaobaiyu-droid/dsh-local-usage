@@ -20,6 +20,7 @@ What the panel gives you, in one place:
 - **Totals for the range** — cost, total tokens, the uncached-input, output, cache-read and cache-write buckets, billed calls, and contributing sessions.
 - **A rate card you configure** — per-model input, cache-read, cache-write and output prices, a fallback rate, and a Beijing-time peak schedule with a multiplier.
 - **A stated basis** — the formula, the rates actually in effect, and the provenance of every figure, on the page itself rather than in documentation only.
+- **The harness's language, not a switch of its own** — every sentence comes from a dictionary and every figure is formatted for the active locale, so the Chinese panel counts in 万/亿 where the English one counts in M/B.
 - **No network egress** — the fold runs inside the dsh process over durable session logs; nothing is uploaded and no external request is made.
 
 ## Table of Contents
@@ -62,9 +63,18 @@ The range selector chooses the lens: **Today**, **Last 7 days**, **This month**,
 
 Below it a hero figure states total spend over the selected range, above a row of tiles carrying total tokens, the input, output, and cache buckets, the billed call count, and the number of contributing sessions.
 
-The calendar is the stable frame: it is Sunday-first with a compact `日 1 2 3 4 5 6` gutter, spans a rolling 52 weeks ending with the current one, and does not change when the range does. Cells are fixed squares whose edge is measured from the panel: while a year of columns fits at the minimum edge they grow to fill it, and below that the grid keeps the minimum edge and drops its oldest weeks, so it never scrolls sideways however narrow the panel gets — including with the sidebar expanded. Cells carry no border; intensity is the only mark on them, and hovering one opens a card with that day's cost, total tokens, input, output, and cache-read tokens, and call count.
+The calendar is the stable frame: it is Sunday-first with a one-glyph weekday gutter — `日 一 二 三 四 五 六` in Chinese, `S M T W T F S` in English, from the dictionary rather than from a hard-coded set — spans a rolling 52 weeks ending with the current one, and does not change when the range does. Cells are fixed squares whose edge is measured from the panel: while a year of columns fits at the minimum edge they grow to fill it, and below that the grid keeps the minimum edge and drops its oldest weeks, so it never scrolls sideways however narrow the panel gets — including with the sidebar expanded. Cells carry no border; intensity is the only mark on them, and hovering one opens a card with that day's cost, total tokens, input, output, and cache-read tokens, and call count. The card's figures are exact — every digit, grouped the reader's way — because a rounded count is the one thing a drill-down cannot answer.
 
 Shading is a quantile ramp over the window's active days — median, then 75th and 90th percentiles — so the scale adapts to how the profile actually spends rather than assuming a distribution.
+
+### Language
+
+The panel follows the harness's own language setting; it has no switch of its own. Copy and figures are internationalized separately, because they are two different problems:
+
+- **Copy** is a dictionary. Every user-visible string lives in `src/client/locales.ts`, in both shipped locales, under the `usage` namespace — the panel renders no literal of its own. A `satisfies Record<UsageInsightsLocaleKey, string>` on the English dictionary makes a key present in one locale and missing from the other a compile error, and `tests/locales.client.spec.ts` closes the gap the type system cannot see, by requiring both locales to ask for the same `{name}` placeholders: the locale runtime leaves an unmatched placeholder in place, so a mismatch would render the literal text `{date}` to a reader with no error anywhere. A language pack adding a locale registers a third dictionary and needs no component change.
+- **Figures** are not copy, and are formatted in `src/client/format.ts` against the active locale: currency placement, grouping, the decimal mark, the compact scale and date order are properties of the reader's language, not of the sentence wrapped around them. The compact token scale is the clearest case — English counts in K/M/B while Chinese counts in 万/亿, so a Chinese panel reading `214.87M` was an untranslated figure rather than a stylistic one. English output is unchanged by that switch, because `Intl` compact notation resolves to the same K/M/B the hard-coded suffixes used.
+
+Because the Host's report is language-neutral — it carries counts, rates and a day key, never a rendered string — switching language costs one re-render and re-reads nothing. A figure that cannot be formatted as configured degrades instead of failing: an unknown ISO currency code renders as `CODE 0.00`, and a well-formed locale tag no `Intl` data exists for falls back to the default locale's figures.
 
 ### Configuration
 
@@ -126,6 +136,8 @@ A forked session's log begins with its parent's inherited prefix and those turns
 
 The browser half contributes a global panel: one `sidebar.panellist` entry sharing its id with one `main` keyed-slot occupant, so the sidebar owns the button and the frame owns the column. Because a global panel is retained rather than remounted, the panel reads `usePanelInfo` and only reads logs while it is the selected one. It reaches the Host over the one Fetch route the Host half registers, so this half holds no fold logic and no pricing — and the package needs no place in the product's Remote assembly. There is no charting library in this product and adding one is out of bounds, so the calendar is a CSS grid of cells shaded with `color-mix` over a semantic theme token.
 
+The locale reaches the panel through the plugin's own injected face rather than a second subscription: the renderer re-derives each entry's dictionary function from the locale revision, so a language switch already re-renders the panel, and the injected `locale()` reading the service during render is therefore always the id the dictionary beside it was resolved from. Formatters are cached per `(locale, currency, digits)` and a rejected construction is cached as absent, which is what keeps a misconfigured currency code from throwing on every render.
+
 -----
 
 <a id="further-exploration"></a>
@@ -155,6 +167,8 @@ These limits define what the page can report; they are current package constrain
 
 - **Prices are configuration, not billing** — the harness records tokens and never currency, so every money figure is `tokens × configured rate`; a route with no matching card is priced at the fallback rate and named in the page's warning line rather than silently estimated.
 - **Chinese public holidays are not modelled** — peak windows follow the published Beijing-time schedule for Monday through Friday, so a holiday weekday inside a window is billed at the peak rate.
+- **Two locales are shipped** — Chinese and English. A third language registered by a language pack resolves key-by-key through English, so it renders an English sentence until that pack also registers a `usage` dictionary. Copy is bilingual; the figures are not, because a locale with no `Intl` data behind it silently renders the default locale's numbers.
+- **The language is the harness's, not the panel's** — there is no per-panel language selection. A reader who wants Chinese figures on an English harness has to change the harness's language, which changes every surface rather than this one.
 - **A settlement still streaming contributes nothing** — its usage is not final and a later settlement may replace it, so the newest exchange of a running session appears only once it settles.
 - **Inherited fork prefixes are excluded by design** — a forked session reports only the spend it caused itself, so per-session figures cannot be summed to reconstruct what a parent conversation cost in total.
 - **The calendar shows one rolling window only** — a deployment that needs an arbitrary date range has no control for it yet, because the panel fixes the frame at mount.

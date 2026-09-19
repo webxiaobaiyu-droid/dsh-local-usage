@@ -34,12 +34,14 @@ export interface CalendarHeatmapProps {
     readonly t: PropsLocale<'usage'>['t'];
     /** Currency formatter owned by the panel. */
     readonly formatCost: (value: number) => string;
-    /** Token formatter owned by the panel. */
-    readonly formatTokens: (value: number) => string;
+    /** Full integer formatter: every figure the calendar shows is a drill-down one. */
+    readonly formatInteger: (value: number) => string;
+    /** Localized date formatter, for a day key rendered to a reader. */
+    readonly formatDay: (day: string) => string;
 }
 /**
  * Render the calendar grid plus its legend and hover card.
  * @param props - the window, its day rows, the selected range, formatters, and copy.
  * @returns the calendar figure.
  */
-export declare function CalendarHeatmap({ from, to, days, totalCost, peak, t, formatCost, formatTokens, }: CalendarHeatmapProps): ReactNode;
+export declare function CalendarHeatmap({ from, to, days, totalCost, peak, t, formatCost, formatInteger, formatDay, }: CalendarHeatmapProps): ReactNode;
