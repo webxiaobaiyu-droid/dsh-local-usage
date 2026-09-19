@@ -20,7 +20,7 @@
  * @module dsh-local-usage/client/UsagePanel
  */
 
-import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -74,17 +74,18 @@ export type UsagePanelProps =
 
 type Translate = UsagePanelProps['t']
 
-type ViewState =
+/**
+ * One report fetch's state.
+ *
+ * The calendar's window and the selected range are two independent reads that
+ * happen to share a window, so they keep two of these: a range change then
+ * re-prices only the range, while the year already on screen stays where it is.
+ */
+type ReportState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
   | { readonly status: 'error' }
-  | {
-    readonly status: 'ready'
-    /** The calendar's window: its day rows and totals. */
-    readonly grid: UsageInsightsReport
-    /** The selected range: the summary figures. */
-    readonly summary: UsageInsightsReport
-  }
+  | { readonly status: 'ready'; readonly report: UsageInsightsReport }
 
 /** The day page's own fold, kept apart from the calendar's so a slow one never blanks the other. */
 type DayState =
@@ -172,7 +173,13 @@ function tokensOf(row: UsageDayRow): number {
 export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePanelProps): ReactNode {
   const [rangeId, setRangeId] = useState('month')
   const [request, setRequest] = useState(0)
-  const [state, setState] = useState<ViewState>({ status: 'idle' })
+  // Two reads, two states. The calendar's window is the expensive one — the first
+  // request after a Host restart is what reads every log — and a range change
+  // must not pay for it a second time.
+  const [gridState, setGridState] = useState<ReportState>({ status: 'idle' })
+  const [summaryState, setSummaryState] = useState<ReportState>({ status: 'idle' })
+  // Retrying the range must not read the year again, so it has its own counter.
+  const [summaryRequest, setSummaryRequest] = useState(0)
   // The day page: which day is open, that day's own fold, and a retry counter.
   const [selectedDay, setSelectedDay] = useState<string | undefined>(undefined)
   const [dayState, setDayState] = useState<DayState>({ status: 'idle' })
@@ -195,25 +202,43 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
   const [rangeFrom, rangeTo] = useMemo(() => rangeBounds(rangeId, now), [rangeId, now])
   const rangeIsWindow = rangeFrom === gridFrom && rangeTo === gridTo
 
+  // The calendar's window. This is the request that reads the logs, so it is the
+  // only one that follows the window and the refresh counter — not the range.
   useEffect(() => {
     // A retained-but-hidden panel must not read logs nobody is looking at.
     if (!active) return
     let current = true
-    setState({ status: 'loading' })
-    void (async () => {
-      // Sequential, not parallel: the first call is the one that reads every
-      // log, and the second then re-prices the samples it cached.
-      const gridReport = await report(request > 0, gridFrom, gridTo)
-      const summary = rangeIsWindow ? gridReport : await report(false, rangeFrom, rangeTo)
-      return { gridReport, summary }
-    })().then(
-      ({ gridReport, summary }) => {
-        if (current) setState({ status: 'ready', grid: gridReport, summary })
-      },
-      () => { if (current) setState({ status: 'error' }) },
+    setGridState({ status: 'loading' })
+    void report(request > 0, gridFrom, gridTo).then(
+      value => { if (current) setGridState({ status: 'ready', report: value }) },
+      () => { if (current) setGridState({ status: 'error' }) },
     )
     return () => { current = false }
-  }, [active, report, request, gridFrom, gridTo, rangeFrom, rangeTo, rangeIsWindow])
+  }, [active, report, request, gridFrom, gridTo])
+
+  // The selected range, folded over the same samples. It waits for the window to
+  // settle rather than racing it: two requests in flight together would each see
+  // an empty Host cache and each read every log, which is the cost this split
+  // exists to avoid. Once the window has been read the range is a re-price.
+  useEffect(() => {
+    if (!active) {
+      setSummaryState(previous => (previous.status === 'idle' ? previous : { status: 'idle' }))
+      return
+    }
+    if (gridState.status === 'idle' || gridState.status === 'loading') return
+    // A range that is the whole window needs no second read: it is already here.
+    if (rangeIsWindow && gridState.status === 'ready') {
+      setSummaryState({ status: 'ready', report: gridState.report })
+      return
+    }
+    let current = true
+    setSummaryState({ status: 'loading' })
+    void report(false, rangeFrom, rangeTo).then(
+      value => { if (current) setSummaryState({ status: 'ready', report: value }) },
+      () => { if (current) setSummaryState({ status: 'error' }) },
+    )
+    return () => { current = false }
+  }, [active, report, rangeFrom, rangeTo, rangeIsWindow, summaryRequest, gridState])
 
   // The day page's own fold. Cheap by construction: the samples behind it are
   // already in the Host's memory, so narrowing the window to one day re-prices
@@ -249,18 +274,34 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
   // calendar's report is being replaced, and a figure formatted in the wrong
   // currency is worse than one formatted a moment late.
   const currency = dayState.status === 'ready' ? dayState.report.currency
-    : state.status === 'ready' ? state.grid.currency
-      : 'CNY'
-  const money = (value: number): string => formatCost(value, currency, activeLocale)
-  const tokens = (value: number): string => formatTokens(value, activeLocale)
-  const integer = (value: number): string => formatInteger(value, activeLocale)
-  const dateText = (value: string): string => formatDay(value, activeLocale)
-  const weekdayOf = (value: string): string => {
+    : gridState.status === 'ready' ? gridState.report.currency
+      : summaryState.status === 'ready' ? summaryState.report.currency
+        : 'CNY'
+  // Every formatter is stable until the currency or the language moves. The
+  // calendar memoizes the year of cells it draws, and a formatter rebuilt on each
+  // render would hand that subtree new props and defeat the memo entirely.
+  const money = useCallback(
+    (value: number): string => formatCost(value, currency, activeLocale),
+    [currency, activeLocale],
+  )
+  const tokens = useCallback(
+    (value: number): string => formatTokens(value, activeLocale),
+    [activeLocale],
+  )
+  const integer = useCallback(
+    (value: number): string => formatInteger(value, activeLocale),
+    [activeLocale],
+  )
+  const dateText = useCallback(
+    (value: string): string => formatDay(value, activeLocale),
+    [activeLocale],
+  )
+  const weekdayOf = useCallback((value: string): string => {
     const time = dayTime(value)
     return time === undefined ? '' : t(weekdayKey(time))
-  }
+  }, [t])
 
-  const gridDays = state.status === 'ready' ? state.grid.days : []
+  const gridDays = gridState.status === 'ready' ? gridState.report.days : []
   const peak = gridDays.reduce<UsageDayRow | undefined>(
     (best, day) => (best === undefined || day.cost > best.cost ? day : best),
     undefined,
@@ -269,7 +310,7 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
   return (
     <section
       className={css.panel}
-      aria-busy={state.status === 'loading' || dayState.status === 'loading'}
+      aria-busy={gridState.status === 'loading' || dayState.status === 'loading'}
     >
       <PanelBoundary
         fallback={(
@@ -319,7 +360,7 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={state.status === 'loading'}
+                  disabled={gridState.status === 'loading'}
                   onClick={() => { setRequest(value => value + 1) }}
                 >
                   {t('refresh')}
@@ -327,10 +368,10 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
               </div>
             </header>
 
-            {state.status === 'loading' || state.status === 'idle'
+            {gridState.status === 'loading' || gridState.status === 'idle'
               ? <p className={css.status} role="status">{t('loading')}</p>
               : null}
-            {state.status === 'error' ? (
+            {gridState.status === 'error' ? (
               <div className={css.failure}>
                 <p role="alert">{t('error')}</p>
                 <Button variant="outline" size="sm" onClick={() => { setRequest(value => value + 1) }}>
@@ -339,15 +380,41 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
               </div>
             ) : null}
 
-            {state.status === 'ready' ? (
+            {gridState.status === 'ready' ? (
               <>
-                <SummaryStrip report={state.summary} t={t} money={money} tokens={tokens} integer={integer} />
+                {/* The range has its own failure and its own retry: a range that
+                 * cannot be folded must not take the year down with it, and
+                 * retrying it must not read the year's logs again. */}
+                {summaryState.status === 'ready'
+                  ? (
+                    <SummaryStrip
+                      report={summaryState.report}
+                      t={t}
+                      money={money}
+                      tokens={tokens}
+                      integer={integer}
+                    />
+                  )
+                  : summaryState.status === 'error'
+                    ? (
+                      <div className={css.failure}>
+                        <p role="alert">{t('error')}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setSummaryRequest(value => value + 1) }}
+                        >
+                          {t('retry')}
+                        </Button>
+                      </div>
+                    )
+                    : <p className={css.status} role="status">{t('loading')}</p>}
 
                 <CalendarHeatmap
                   from={gridFrom}
                   to={gridTo}
                   days={gridDays}
-                  totalCost={state.grid.totals.cost}
+                  totalCost={gridState.report.totals.cost}
                   peak={peak}
                   t={t}
                   formatCost={money}
@@ -358,11 +425,16 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
                 />
 
                 <footer className={css.notes}>
-                  <PricingNotes report={state.grid} locale={activeLocale} t={t} />
-                  <DataSourceNotes report={state.grid} weeks={WINDOW_WEEKS} locale={activeLocale} t={t} />
-                  {state.grid.unpricedRoutes.length === 0 ? null : (
+                  <PricingNotes report={gridState.report} locale={activeLocale} t={t} />
+                  <DataSourceNotes
+                    report={gridState.report}
+                    weeks={WINDOW_WEEKS}
+                    locale={activeLocale}
+                    t={t}
+                  />
+                  {gridState.report.unpricedRoutes.length === 0 ? null : (
                     <p className={css.warning} role="note">
-                      {t('unpriced', { list: state.grid.unpricedRoutes.join(', ') })}
+                      {t('unpriced', { list: gridState.report.unpricedRoutes.join(', ') })}
                     </p>
                   )}
                 </footer>
