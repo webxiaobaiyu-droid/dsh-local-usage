@@ -1,6 +1,6 @@
 {
   "name": "dsh-local-usage",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Usage statistics panel for DeepSeek Harness: historical token and money aggregates folded from every durable session log, drawn as a rolling-year heatmap.",
   "keywords": [
     "deepseek-harness",
