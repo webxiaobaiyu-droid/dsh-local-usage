@@ -20,6 +20,7 @@ What the panel gives you, in one place:
 - **Five ranges** — today, last 7 days, this month, this quarter, this year — every one of them ending today.
 - **Totals for the range** — cost, total tokens, the uncached-input, output, cache-read and cache-write buckets, the cache hit rate, billed calls, and contributing sessions.
 - **A rate card you configure** — per-model input, cache-read, cache-write and output prices, a fallback rate, and a Beijing-time peak schedule with a multiplier.
+- **A reliability statement** — under the calendar, what the window's attempts cost it: provider retries grouped by cause, tool errors as a share of tool calls, and context compactions that failed. It appears only when there is something to say.
 - **A stated basis** — the formula, the rates actually in effect, and the provenance of every figure, on the page itself rather than in documentation only.
 - **The harness's language, not a switch of its own** — every sentence comes from a dictionary and every figure is formatted for the active locale, so the Chinese panel counts in 万/亿 where the English one counts in M/B.
 - **No network egress** — the fold runs inside the dsh process over durable session logs; nothing is uploaded and no external request is made.
@@ -87,6 +88,12 @@ The panel follows the harness's own language setting; it has no switch of its ow
 
 Because the Host's report is language-neutral — it carries counts, rates and a day key, never a rendered string — switching language costs one re-render and re-reads nothing. A figure that cannot be formatted as configured degrades instead of failing: an unknown ISO currency code renders as `CODE 0.00`, and a well-formed locale tag no `Intl` data exists for falls back to the default locale's figures.
 
+### What the run cost to get there
+
+Under the calendar, and only when the window recorded something, the panel states its reliability: attempts the provider had to be asked for again, tool calls whose result carried an error, and context compactions that ended in an error — each grouped by the code its producer issued, so a rate limit reads differently from a timeout and a stale file read differs from a failed edit. A window that recorded clean work states nothing at all rather than a spotless record nobody asked about.
+
+It reads as an explanation of the figures above rather than a report of its own: a run fighting rate limits and failing to compact its context is the usual reason a window costs more than its token counts suggest, and the compaction line is the one to look at when cache-read tokens climb.
+
 ### Configuration
 
 | Field | Default | Meaning |
@@ -110,7 +117,7 @@ The panel states its own provenance under **Where these figures come from / 用�
 
 ### What the figures mean
 
-One sample is produced per **billed settlement**, using the same semantics as the harness's own `tokenUsage` projection: a settlement replaces the earlier sample of the same `(turn, step)` slot, `llm/retry-started` closes that slot so a retried attempt is billed separately, an identical repeat changes nothing, and a settlement that committed no surface message still counts through the usage carried in its embedded stream. The extractor therefore reproduces the persisted projection's totals exactly, which is what the package's verification checks against real logs. `uncachedInputTokens` excludes cache traffic; `cacheReadTokens` and `cacheWriteTokens` count as zero when a provider does not report them. Cost is `tokens × rate` per bucket, priced at each sample's own instant, so a peak boundary inside one day prices the samples on both sides correctly instead of averaging them. The **cache hit rate** is the share of every prompt token the provider served from cache — `cacheReadTokens ÷ (uncachedInputTokens + cacheReadTokens + cacheWriteTokens)` — so a token written into the cache counts as a miss rather than a hit, and a window that held no prompt tokens states no rate at all rather than a zero.
+One sample is produced per **billed settlement**, using the same semantics as the harness's own `tokenUsage` projection: a settlement replaces the earlier sample of the same `(turn, step)` slot, `llm/retry-started` closes that slot so a retried attempt is billed separately, an identical repeat changes nothing, and a settlement that committed no surface message still counts through the usage carried in its embedded stream. The extractor therefore reproduces the persisted projection's totals exactly, which is what the package's verification checks against real logs. `uncachedInputTokens` excludes cache traffic; `cacheReadTokens` and `cacheWriteTokens` count as zero when a provider does not report them. Cost is `tokens × rate` per bucket, priced at each sample's own instant, so a peak boundary inside one day prices the samples on both sides correctly instead of averaging them. Every reliability figure is a count of durable events — `llm/retry` for a repeated attempt, a `tool/result` carrying an `error`, `compaction/start` against a `compaction/end` carrying an `error` — folded per local day and cut by the same window as the samples, which is exact for every day-bounded window the panel asks for. The **cache hit rate** is the share of every prompt token the provider served from cache — `cacheReadTokens ÷ (uncachedInputTokens + cacheReadTokens + cacheWriteTokens)` — so a token written into the cache counts as a miss rather than a hit, and a window that held no prompt tokens states no rate at all rather than a zero.
 
 -----
 

@@ -40,6 +40,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  */
 const HOST_PACKAGES = {
   'cordis': 'vendor/cordis',
+  'dsh-compaction': 'packages/compaction/compaction',
   'dsh-session': 'packages/core/session',
   'dsh-session-query': 'packages/session-query/session-query',
   'dsh-session-title': 'packages/session/session-title',

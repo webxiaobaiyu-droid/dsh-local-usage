@@ -106,6 +106,47 @@ export interface UsageInsightsRequest {
     /** Inclusive upper bound on a turn's settlement time, in Unix epoch milliseconds. */
     to?: number;
 }
+/** One grouped reliability signal: a stable code and how often the window recorded it. */
+export interface UsageSignalRow {
+    /**
+     * Machine code as the producer issued it — a provider-neutral `LlmFailure`
+     * code such as `RATE_LIMIT`, or a tool error code such as `FS_STALE_VERSION`.
+     * The panel supplies the sentence, so an unfamiliar code still reads as itself
+     * rather than as "other".
+     */
+    readonly code: string;
+    /** How many times the window recorded that code. */
+    readonly count: number;
+}
+/**
+ * How the window actually went, next to what it cost.
+ *
+ * Cost answers what was spent; this answers what it was spent fighting. Every
+ * figure is folded from the same logs the samples come from, and each one is a
+ * count of durable events rather than an inference: an attempt the provider had
+ * to be asked for twice, a tool call whose result carried an error, a context
+ * compaction that ended in an error and so left its context uncompacted.
+ */
+export interface UsageReliability {
+    /** Provider attempts the window had to ask for again. */
+    readonly retries: number;
+    /** Retry causes, most frequent first. */
+    readonly retryCauses: readonly UsageSignalRow[];
+    /** Tool calls the window recorded, successful or not. */
+    readonly toolCalls: number;
+    /** Tool calls whose result carried an error. */
+    readonly toolErrors: number;
+    /** Tool error codes, most frequent first. */
+    readonly toolErrorCodes: readonly UsageSignalRow[];
+    /** Context compactions the window attempted. */
+    readonly compactions: number;
+    /** Those compactions that ended in an error; each one leaves its context uncompacted. */
+    readonly compactionFailures: number;
+}
+/** A reliability fold over one window that recorded nothing at all. */
+export declare const NO_RELIABILITY: UsageReliability;
+/** Whether a window recorded anything worth stating. */
+export declare function reliabilityIsEmpty(reliability: UsageReliability): boolean;
 /** One complete aggregate over every readable session log. */
 export interface UsageInsightsReport {
     /** Host clock at the moment this report was assembled. */
@@ -129,6 +170,8 @@ export interface UsageInsightsReport {
     readonly scannedSessions: number;
     /** Session logs that could not be read; their usage is missing from every total. */
     readonly unreadableSessions: number;
+    /** What the window spent its attempts on: retries, tool errors, failed compactions. */
+    readonly reliability: UsageReliability;
     /** Routes that matched no price rule and fell back to the default rate. */
     readonly unpricedRoutes: readonly string[];
     /** Token count priced at the fallback rate rather than a matched rule. */

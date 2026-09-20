@@ -21,8 +21,8 @@ import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 // engine the batch read is read off.
 import type { SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
-import { buildReport, samplesOf } from './aggregate.ts'
-import type { PricingOptions, SessionUsageInput, UsageSample } from './aggregate.ts'
+import { buildReport, reliabilityOf, reliabilityWithin, samplesOf } from './aggregate.ts'
+import type { PricingOptions, ReliabilityDay, SessionUsageInput, UsageSample } from './aggregate.ts'
 import { parsePeakWindow } from './pricing.ts'
 import type { PeakWindow, PriceRate, PriceRule } from './pricing.ts'
 import type { UsageInsightsReport } from './types.ts'
@@ -103,9 +103,17 @@ export const DEFAULT_CONFIG: UsageInsightsConfig = {
   peakMultiplier: 2,
 }
 
-/** One cached session fold: the samples plus the identity facts the report repeats. */
+/** One cached session fold: the samples, the reliability counters, and the identity facts. */
 interface CachedSession {
   readonly samples: readonly UsageSample[]
+  /**
+   * Reliability counters by local day, over the same prefix the samples cover.
+   *
+   * Folded here rather than per request so a window change re-cuts the cache the
+   * way it re-cuts samples, and a fork's inherited prefix is excluded exactly as
+   * it is for samples: those retries and failed tools were the parent's.
+   */
+  readonly reliability: readonly ReliabilityDay[]
   readonly title?: string
   readonly cwd?: string
   readonly createdAt: number
@@ -140,10 +148,13 @@ interface SessionFoldSource {
  * @returns the samples plus the identity facts the report repeats.
  */
 function foldSession(source: SessionFoldSource): CachedSession {
-  const samples = samplesOf(source.events.filter(event => event.seq >= source.skipBefore))
+  const own = source.events.filter(event => event.seq >= source.skipBefore)
+  const samples = samplesOf(own)
+  const reliability = reliabilityOf(own)
   const title = foldSessionTitle(source.events)?.title
   return {
     samples,
+    reliability,
     createdAt: source.createdAt,
     ...title === undefined || title.length === 0 ? {} : { title },
     ...source.cwd === undefined ? {} : { cwd: source.cwd },
@@ -160,6 +171,7 @@ function sessionInputOf(
     sessionId,
     createdAt: entry.createdAt,
     samples: withinRange(entry.samples, request.from, request.to),
+    reliability: reliabilityWithin(entry.reliability, request.from, request.to),
     ...titleFields(entry),
   }
 }

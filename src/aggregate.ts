@@ -15,6 +15,9 @@ import { lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm/assistant-stream'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm/types'
 // Type-only: activates the 'llm/retry-started' variant the retry slot reads.
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
+// Type-only: activates the 'compaction/start' and 'compaction/end' variants the
+// reliability fold counts, so context that could not be compacted is reported.
+import type {} from '@deepseek-ai/dsh-compaction/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { costOf, isPeakTime, selectRate } from './pricing.ts'
 import type { PeakWindow, PriceRate, PriceRule } from './pricing.ts'
@@ -25,7 +28,9 @@ import type {
   UsageInsightsReport,
   UsageModelRow,
   UsageProjectRow,
+  UsageReliability,
   UsageSessionRow,
+  UsageSignalRow,
   UsageTokens,
 } from './types.ts'
 
@@ -42,13 +47,15 @@ export interface UsageSample {
   readonly tokens: UsageTokens
 }
 
-/** One session's foldable input: identity facts plus its extracted samples. */
+/** One session's inputs to a report, plus what the window keeps of it. */
 export interface SessionUsageInput {
   readonly sessionId: string
   readonly title?: string
   readonly cwd?: string
   readonly createdAt: number
   readonly samples: readonly UsageSample[]
+  /** The window's share of this session's reliability counters; empty when it recorded none. */
+  readonly reliability?: readonly ReliabilityDay[]
 }
 
 /** The rate card and peak schedule every sample is priced with. */
@@ -190,6 +197,185 @@ function sameTokens(left: UsageTokens, right: UsageTokens): boolean {
     && left.outputTokens === right.outputTokens
     && left.cacheReadTokens === right.cacheReadTokens
     && left.cacheWriteTokens === right.cacheWriteTokens
+}
+
+/**
+ * One local day of reliability counters, as the per-session cache keeps them.
+ *
+ * Counters are folded per local day rather than per event so a window can be
+ * re-cut from the cache the way samples are, without holding one object per tool
+ * call: every window the panel asks for is bounded by local days, which is what
+ * makes the day the honest resolution. Codes are kept as the producer issued
+ * them — grouping by cause is the whole point, and inventing our own taxonomy
+ * would put a translation between the reader and the provider's own vocabulary.
+ */
+export interface ReliabilityDay {
+  /** Local calendar day as `YYYY-MM-DD`. */
+  readonly day: string
+  retries: number
+  readonly retryCauses: Map<string, number>
+  toolCalls: number
+  toolErrors: number
+  readonly toolErrorCodes: Map<string, number>
+  compactions: number
+  compactionFailures: number
+}
+
+/**
+ * Fold one session's reliability counters, one bucket per local day.
+ *
+ * Every figure is a count of a durable event, never an inference from content:
+ * `llm/retry` for an attempt the provider had to be asked for again,
+ * `tool/result` carrying an `error` for a tool that failed,
+ * `compaction/start` and a `compaction/end` carrying an `error` for context that
+ * could not be compacted. An unknown failure shape still counts — it lands under
+ * the code its producer issued, or under `UNKNOWN_CAUSE` when it issued none.
+ *
+ * @param events - one session's durable log, in seq order.
+ * @returns one bucket per day that recorded a signal, ascending by day.
+ */
+export function reliabilityOf(events: readonly SessionEvent[]): ReliabilityDay[] {
+  const byDay = new Map<string, ReliabilityDay>()
+  const dayOf = (time: number): ReliabilityDay => {
+    const day = localDayKey(time)
+    let bucket = byDay.get(day)
+    if (bucket === undefined) {
+      bucket = {
+        day,
+        retries: 0,
+        retryCauses: new Map<string, number>(),
+        toolCalls: 0,
+        toolErrors: 0,
+        toolErrorCodes: new Map<string, number>(),
+        compactions: 0,
+        compactionFailures: 0,
+      }
+      byDay.set(day, bucket)
+    }
+    return bucket
+  }
+  const bump = (counts: Map<string, number>, code: string): void => {
+    counts.set(code, (counts.get(code) ?? 0) + 1)
+  }
+
+  for (const event of events) {
+    switch (event.type) {
+      case 'llm/retry': {
+        const bucket = dayOf(event.time)
+        bucket.retries += 1
+        bump(bucket.retryCauses, failureCode(event.data.failure))
+        break
+      }
+      case 'tool/call':
+        dayOf(event.time).toolCalls += 1
+        break
+      case 'tool/result': {
+        const error = event.data.error
+        if (error === undefined || error === null) break
+        const bucket = dayOf(event.time)
+        bucket.toolErrors += 1
+        bump(bucket.toolErrorCodes, errorCode(error))
+        break
+      }
+      case 'compaction/start':
+        dayOf(event.time).compactions += 1
+        break
+      case 'compaction/end':
+        if (event.data.error === undefined || event.data.error === null) break
+        dayOf(event.time).compactionFailures += 1
+        break
+      default:
+        break
+    }
+  }
+
+  return [...byDay.values()].sort(
+    (left, right) => (dayKeyToTime(left.day) ?? 0) - (dayKeyToTime(right.day) ?? 0),
+  )
+}
+
+/** Code a retry failure carries; a shape we cannot read still gets counted. */
+function failureCode(failure: unknown): string {
+  const code = (failure as { code?: unknown } | undefined)?.code
+  return typeof code === 'string' && code.length > 0 ? code : UNKNOWN_CAUSE
+}
+
+/** Code a tool error carries, from either of the two shapes a result may use. */
+function errorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | undefined)?.code
+  if (typeof code === 'string' && code.length > 0) return code
+  const name = (error as { name?: unknown } | undefined)?.name
+  return typeof name === 'string' && name.length > 0 ? name : UNKNOWN_CAUSE
+}
+
+/** Code used for a signal whose producer issued none. */
+export const UNKNOWN_CAUSE = 'UNKNOWN'
+
+/**
+ * The days of a fold that one request's window keeps.
+ *
+ * A day is kept when its local midnight lies inside the window, which makes the
+ * cut exact for the day-bounded windows the panel asks for and deliberately
+ * coarse — never silently partial — for any other.
+ *
+ * @param days - one session's reliability fold.
+ * @param from - inclusive lower bound, or `undefined` for unbounded.
+ * @param to - inclusive upper bound, or `undefined` for unbounded.
+ * @returns the days inside the window.
+ */
+export function reliabilityWithin(
+  days: readonly ReliabilityDay[],
+  from: number | undefined,
+  to: number | undefined,
+): ReliabilityDay[] {
+  if (from === undefined && to === undefined) return [...days]
+  return days.filter((day) => {
+    const start = dayKeyToTime(day.day)
+    if (start === undefined) return false
+    return (from === undefined || start >= from) && (to === undefined || start <= to)
+  })
+}
+
+/** Merge one window's reliability folds into the report's single statement. */
+function reliabilityOfWindow(
+  inputs: readonly SessionUsageInput[],
+): UsageReliability {
+  const retryCauses = new Map<string, number>()
+  const toolErrorCodes = new Map<string, number>()
+  let retries = 0
+  let toolCalls = 0
+  let toolErrors = 0
+  let compactions = 0
+  let compactionFailures = 0
+
+  for (const input of inputs) {
+    for (const day of input.reliability ?? []) {
+      retries += day.retries
+      toolCalls += day.toolCalls
+      toolErrors += day.toolErrors
+      compactions += day.compactions
+      compactionFailures += day.compactionFailures
+      for (const [code, count] of day.retryCauses) retryCauses.set(code, (retryCauses.get(code) ?? 0) + count)
+      for (const [code, count] of day.toolErrorCodes) toolErrorCodes.set(code, (toolErrorCodes.get(code) ?? 0) + count)
+    }
+  }
+
+  return {
+    retries,
+    retryCauses: signalRows(retryCauses),
+    toolCalls,
+    toolErrors,
+    toolErrorCodes: signalRows(toolErrorCodes),
+    compactions,
+    compactionFailures,
+  }
+}
+
+/** Grouped counts as rows, largest first, ties broken by code so the order is stable. */
+function signalRows(counts: ReadonlyMap<string, number>): UsageSignalRow[] {
+  return [...counts.entries()]
+    .map(([code, count]) => ({ code, count }))
+    .sort((left, right) => right.count - left.count || left.code.localeCompare(right.code))
 }
 
 /** Mutable accumulator for one row of the report. */
@@ -373,6 +559,7 @@ export function buildReport(
     sessions: sessionRows,
     scannedSessions: inputs.length,
     unreadableSessions: meta.unreadableSessions,
+    reliability: reliabilityOfWindow(inputs),
     unpricedRoutes: [...unpricedRoutes].sort(),
     unpricedTokens,
     cached: meta.cached,

@@ -676,6 +676,21 @@ export const styles = String.raw`
   margin: 0;
 }
 
+.dlu-notesHeading {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The figure carries the finding, the note beside it says what it was measured
+   against; tertiary text at the same size would leave the two indistinguishable. */
+.dlu-noteValue {
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .dlu-warning {
   color: var(--dsw-alias-state-warn-primary);
 }

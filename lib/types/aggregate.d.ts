@@ -24,13 +24,15 @@ export interface UsageSample {
     /** Exact provider-reported buckets for the turn. */
     readonly tokens: UsageTokens;
 }
-/** One session's foldable input: identity facts plus its extracted samples. */
+/** One session's inputs to a report, plus what the window keeps of it. */
 export interface SessionUsageInput {
     readonly sessionId: string;
     readonly title?: string;
     readonly cwd?: string;
     readonly createdAt: number;
     readonly samples: readonly UsageSample[];
+    /** The window's share of this session's reliability counters; empty when it recorded none. */
+    readonly reliability?: readonly ReliabilityDay[];
 }
 /** The rate card and peak schedule every sample is priced with. */
 export interface PricingOptions {
@@ -81,6 +83,56 @@ export declare function localDayKey(time: number): string;
  * @returns one sample per billable settlement, ascending by time.
  */
 export declare function samplesOf(events: readonly SessionEvent[]): UsageSample[];
+/**
+ * One local day of reliability counters, as the per-session cache keeps them.
+ *
+ * Counters are folded per local day rather than per event so a window can be
+ * re-cut from the cache the way samples are, without holding one object per tool
+ * call: every window the panel asks for is bounded by local days, which is what
+ * makes the day the honest resolution. Codes are kept as the producer issued
+ * them — grouping by cause is the whole point, and inventing our own taxonomy
+ * would put a translation between the reader and the provider's own vocabulary.
+ */
+export interface ReliabilityDay {
+    /** Local calendar day as `YYYY-MM-DD`. */
+    readonly day: string;
+    retries: number;
+    readonly retryCauses: Map<string, number>;
+    toolCalls: number;
+    toolErrors: number;
+    readonly toolErrorCodes: Map<string, number>;
+    compactions: number;
+    compactionFailures: number;
+}
+/**
+ * Fold one session's reliability counters, one bucket per local day.
+ *
+ * Every figure is a count of a durable event, never an inference from content:
+ * `llm/retry` for an attempt the provider had to be asked for again,
+ * `tool/result` carrying an `error` for a tool that failed,
+ * `compaction/start` and a `compaction/end` carrying an `error` for context that
+ * could not be compacted. An unknown failure shape still counts — it lands under
+ * the code its producer issued, or under `UNKNOWN_CAUSE` when it issued none.
+ *
+ * @param events - one session's durable log, in seq order.
+ * @returns one bucket per day that recorded a signal, ascending by day.
+ */
+export declare function reliabilityOf(events: readonly SessionEvent[]): ReliabilityDay[];
+/** Code used for a signal whose producer issued none. */
+export declare const UNKNOWN_CAUSE = "UNKNOWN";
+/**
+ * The days of a fold that one request's window keeps.
+ *
+ * A day is kept when its local midnight lies inside the window, which makes the
+ * cut exact for the day-bounded windows the panel asks for and deliberately
+ * coarse — never silently partial — for any other.
+ *
+ * @param days - one session's reliability fold.
+ * @param from - inclusive lower bound, or `undefined` for unbounded.
+ * @param to - inclusive upper bound, or `undefined` for unbounded.
+ * @returns the days inside the window.
+ */
+export declare function reliabilityWithin(days: readonly ReliabilityDay[], from: number | undefined, to: number | undefined): ReliabilityDay[];
 /**
  * Fold every session's samples into one priced report.
  * The window is whatever the caller asked for, and every dimension is folded

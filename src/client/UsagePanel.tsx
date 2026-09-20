@@ -32,6 +32,7 @@ import { Tile } from './Tile.tsx'
 import { dayTime, heatmapWindow, weekdayKey } from './heatmap-grid.ts'
 import { DataSourceNotes } from './DataSourceNotes.tsx'
 import { PricingNotes } from './PricingNotes.tsx'
+import { ReliabilityNotes } from './ReliabilityNotes.tsx'
 import { formatCost, formatDay, formatInteger, formatPercent, formatTokens } from './format.ts'
 import type { UsageInsightsLocaleKey } from './locales.ts'
 import { css } from './classes.ts'
@@ -432,6 +433,12 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
                 />
 
                 <footer className={css.notes}>
+                  <ReliabilityNotes
+                    reliability={gridState.report.reliability}
+                    t={t}
+                    integer={integer}
+                    percent={percent}
+                  />
                   <PricingNotes report={gridState.report} locale={activeLocale} t={t} />
                   <DataSourceNotes
                     report={gridState.report}

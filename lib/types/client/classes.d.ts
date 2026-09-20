@@ -48,6 +48,8 @@ export declare const css: {
     readonly monthLabel: "dlu-monthLabel";
     readonly monthRow: "dlu-monthRow";
     readonly notes: "dlu-notes";
+    readonly notesHeading: "dlu-notesHeading";
+    readonly noteValue: "dlu-noteValue";
     readonly numeric: "dlu-numeric";
     readonly panel: "dlu-panel";
     readonly priceCurrency: "dlu-priceCurrency";

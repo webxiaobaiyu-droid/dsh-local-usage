@@ -13,6 +13,7 @@
  * @module dsh-local-usage/client/wire-report
  */
 
+import { NO_RELIABILITY } from '../types.ts'
 import type { UsageInsightsReport, UsagePriceRow } from '../types.ts'
 
 /** Fields this panel can render without, either because they are optional in
@@ -38,6 +39,10 @@ export function normalizeReport(value: WireReport): UsageInsightsReport {
     sessions: value.sessions ?? [],
     scannedSessions: value.scannedSessions ?? 0,
     unreadableSessions: value.unreadableSessions ?? 0,
+    // A Host of another build may not fold reliability at all; a window that
+    // states nothing is the truth about what this Client can see, and the
+    // panel's block stays away rather than claiming a spotless record.
+    reliability: value.reliability ?? NO_RELIABILITY,
     unpricedRoutes: value.unpricedRoutes ?? [],
     unpricedTokens: value.unpricedTokens ?? 0,
     cached: value.cached ?? false,

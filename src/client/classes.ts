@@ -49,6 +49,8 @@ export const css = {
   monthLabel: 'dlu-monthLabel',
   monthRow: 'dlu-monthRow',
   notes: 'dlu-notes',
+  notesHeading: 'dlu-notesHeading',
+  noteValue: 'dlu-noteValue',
   numeric: 'dlu-numeric',
   panel: 'dlu-panel',
   priceCurrency: 'dlu-priceCurrency',
