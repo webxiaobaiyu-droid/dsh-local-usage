@@ -22,6 +22,7 @@
 const costFormatters = new Map<string, Intl.NumberFormat | null>()
 const tokenFormatters = new Map<string, Intl.NumberFormat | null>()
 const integerFormatters = new Map<string, Intl.NumberFormat | null>()
+const percentFormatters = new Map<string, Intl.NumberFormat | null>()
 const rateFormatters = new Map<string, Intl.NumberFormat | null>()
 const dayFormatters = new Map<string, Intl.DateTimeFormat | null>()
 
@@ -144,6 +145,31 @@ export function formatInteger(value: number, locale: string): string {
     () => new Intl.NumberFormat(locale),
   )
   return formatter === undefined ? String(rounded) : formatter.format(rounded)
+}
+
+/**
+ * Render one ratio as a percentage.
+ *
+ * Two fraction digits always, never one and never none: a rate is read by
+ * comparing windows, and a figure that drops its trailing digits (`99.2%` beside
+ * `99.22%`) reads as a change in precision rather than a change in value. The
+ * rounding is the language's own, so the symbol and its placement stay correct
+ * for the reader.
+ * @param value - the ratio, `0..1`.
+ * @param locale - active locale id.
+ * @returns the formatted percentage.
+ */
+export function formatPercent(value: number, locale: string): string {
+  const formatter = resolve(
+    percentFormatters,
+    locale,
+    () => new Intl.NumberFormat(locale, {
+      style: 'percent',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  )
+  return formatter === undefined ? `${(value * 100).toFixed(2)}%` : formatter.format(value)
 }
 
 /**

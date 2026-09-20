@@ -32,6 +32,8 @@ export declare const zh: {
     outputTokens: string;
     cacheRead: string;
     cacheWrite: string;
+    cacheHitRate: string;
+    cacheHitRateBasis: string;
     calls: string;
     sessions: string;
     calendar: string;
@@ -127,6 +129,8 @@ export declare const en: {
     outputTokens: string;
     cacheRead: string;
     cacheWrite: string;
+    cacheHitRate: string;
+    cacheHitRateBasis: string;
     calls: string;
     sessions: string;
     calendar: string;

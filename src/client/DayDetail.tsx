@@ -21,6 +21,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UsageInsightsReport, UsageTokens } from '../types.ts'
 import { projectName } from './paths.ts'
+import { cacheHitRate } from './cache-rate.ts'
 import { Tile } from './Tile.tsx'
 import { css } from './classes.ts'
 
@@ -40,6 +41,8 @@ export interface DayDetailProps {
   readonly formatTokens: (value: number) => string
   /** Full integer formatter owned by the panel, for the table. */
   readonly formatInteger: (value: number) => string
+  /** Percentage formatter owned by the panel, for the cache hit rate. */
+  readonly formatPercent: (value: number) => string
   /** Localized date formatter owned by the panel. */
   readonly formatDay: (day: string) => string
   /** Localized weekday name for a day key. */
@@ -61,7 +64,7 @@ function tokensOf(row: UsageTokens): number {
  * @returns the day view.
  */
 export function DayDetail({
-  day, report, failed, t, formatCost, formatTokens, formatInteger, formatDay, weekdayOf,
+  day, report, failed, t, formatCost, formatTokens, formatInteger, formatPercent, formatDay, weekdayOf,
   onRetry, onBack,
 }: DayDetailProps): ReactNode {
   const frame = useRef<HTMLElement>(null)
@@ -115,6 +118,7 @@ export function DayDetail({
             formatCost={formatCost}
             formatTokens={formatTokens}
             formatInteger={formatInteger}
+            formatPercent={formatPercent}
           />
         )}
     </section>
@@ -122,14 +126,16 @@ export function DayDetail({
 }
 
 /** The figures of a day whose report has arrived. */
-function DayFigures({ report, t, formatCost, formatTokens, formatInteger }: {
+function DayFigures({ report, t, formatCost, formatTokens, formatInteger, formatPercent }: {
   readonly report: UsageInsightsReport
   readonly t: PropsLocale<'usage'>['t']
   readonly formatCost: (value: number) => string
   readonly formatTokens: (value: number) => string
   readonly formatInteger: (value: number) => string
+  readonly formatPercent: (value: number) => string
 }): ReactNode {
   const { totals, projects } = report
+  const hitRate = cacheHitRate(totals)
 
   return (
     <>
@@ -141,6 +147,13 @@ function DayFigures({ report, t, formatCost, formatTokens, formatInteger }: {
           value={formatTokens(totals.cacheReadTokens)}
           label={t('cacheRead')}
           detail={`${t('cacheWrite')} ${formatTokens(totals.cacheWriteTokens)}`}
+        />
+        {/* The same figure as the range strip, so a day whose caching broke is
+            visible from the page that exists to explain that day. */}
+        <Tile
+          value={hitRate === undefined ? '—' : formatPercent(hitRate)}
+          label={t('cacheHitRate')}
+          detail={t('cacheHitRateBasis')}
         />
         <Tile value={formatInteger(totals.calls)} label={t('calls')} />
         <Tile value={formatInteger(projects.length)} label={t('projects')} />

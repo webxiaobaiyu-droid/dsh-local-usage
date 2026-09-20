@@ -26,12 +26,13 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { UsageDayRow, UsageInsightsReport } from '../types.ts'
 import { CalendarHeatmap } from './CalendarHeatmap.tsx'
+import { cacheHitRate } from './cache-rate.ts'
 import { DayDetail } from './DayDetail.tsx'
 import { Tile } from './Tile.tsx'
 import { dayTime, heatmapWindow, weekdayKey } from './heatmap-grid.ts'
 import { DataSourceNotes } from './DataSourceNotes.tsx'
 import { PricingNotes } from './PricingNotes.tsx'
-import { formatCost, formatDay, formatInteger, formatTokens } from './format.ts'
+import { formatCost, formatDay, formatInteger, formatPercent, formatTokens } from './format.ts'
 import type { UsageInsightsLocaleKey } from './locales.ts'
 import { css } from './classes.ts'
 
@@ -292,6 +293,10 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
     (value: number): string => formatInteger(value, activeLocale),
     [activeLocale],
   )
+  const percent = useCallback(
+    (value: number): string => formatPercent(value, activeLocale),
+    [activeLocale],
+  )
   const dateText = useCallback(
     (value: string): string => formatDay(value, activeLocale),
     [activeLocale],
@@ -326,6 +331,7 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
             formatCost={money}
             formatTokens={tokens}
             formatInteger={integer}
+            formatPercent={percent}
             formatDay={dateText}
             weekdayOf={weekdayOf}
             onRetry={() => { setDayRequest(value => value + 1) }}
@@ -393,6 +399,7 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
                       money={money}
                       tokens={tokens}
                       integer={integer}
+                      percent={percent}
                     />
                   )
                   : summaryState.status === 'error'
@@ -448,15 +455,17 @@ export function UsagePanel({ panelId, locale, report, t, usePanelInfo }: UsagePa
 }
 
 /** The selected range's figures: one hero number, then the supporting tiles. */
-function SummaryStrip({ report, t, money, tokens, integer }: {
+function SummaryStrip({ report, t, money, tokens, integer, percent }: {
   readonly report: UsageInsightsReport
   readonly t: Translate
   readonly money: (value: number) => string
   readonly tokens: (value: number) => string
   readonly integer: (value: number) => string
+  readonly percent: (value: number) => string
 }): ReactNode {
   const { totals } = report
   const rangeTokens = report.days.reduce((sum, day) => sum + tokensOf(day), 0)
+  const hitRate = cacheHitRate(totals)
   return (
     <section className={css.summary} aria-label={t('rangeLabel')}>
       <div className={css.hero}>
@@ -474,6 +483,13 @@ function SummaryStrip({ report, t, money, tokens, integer }: {
           value={tokens(totals.cacheReadTokens)}
           label={t('cacheRead')}
           detail={`${t('cacheWrite')} ${tokens(totals.cacheWriteTokens)}`}
+        />
+        {/* A window with no prompt tokens has no rate; the dash says so rather
+            than printing a zero the reader would compare against real rates. */}
+        <Tile
+          value={hitRate === undefined ? '—' : percent(hitRate)}
+          label={t('cacheHitRate')}
+          detail={t('cacheHitRateBasis')}
         />
         <Tile value={integer(totals.calls)} label={t('calls')} />
         <Tile value={integer(totals.sessions)} label={t('sessions')} />

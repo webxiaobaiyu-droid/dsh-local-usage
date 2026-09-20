@@ -53,6 +53,19 @@ export declare function formatTokens(value: number, locale: string): string;
  */
 export declare function formatInteger(value: number, locale: string): string;
 /**
+ * Render one ratio as a percentage.
+ *
+ * Two fraction digits always, never one and never none: a rate is read by
+ * comparing windows, and a figure that drops its trailing digits (`99.2%` beside
+ * `99.22%`) reads as a change in precision rather than a change in value. The
+ * rounding is the language's own, so the symbol and its placement stay correct
+ * for the reader.
+ * @param value - the ratio, `0..1`.
+ * @param locale - active locale id.
+ * @returns the formatted percentage.
+ */
+export declare function formatPercent(value: number, locale: string): string;
+/**
  * Render one configured rate for the price table.
  *
  * Four significant digits rather than a fixed fraction width, because rates

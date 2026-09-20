@@ -34,6 +34,8 @@ export interface DayDetailProps {
     readonly formatTokens: (value: number) => string;
     /** Full integer formatter owned by the panel, for the table. */
     readonly formatInteger: (value: number) => string;
+    /** Percentage formatter owned by the panel, for the cache hit rate. */
+    readonly formatPercent: (value: number) => string;
     /** Localized date formatter owned by the panel. */
     readonly formatDay: (day: string) => string;
     /** Localized weekday name for a day key. */
@@ -48,4 +50,4 @@ export interface DayDetailProps {
  * @param props - the day, its report or its absence, the formatters, and the controls.
  * @returns the day view.
  */
-export declare function DayDetail({ day, report, failed, t, formatCost, formatTokens, formatInteger, formatDay, weekdayOf, onRetry, onBack, }: DayDetailProps): ReactNode;
+export declare function DayDetail({ day, report, failed, t, formatCost, formatTokens, formatInteger, formatPercent, formatDay, weekdayOf, onRetry, onBack, }: DayDetailProps): ReactNode;
