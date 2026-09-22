@@ -41,8 +41,8 @@ Three rules hold it together:
   one accent colour, the panel's own blue, and it is spent on what the numbers
   mean.
 - **One entrance per scene.** A card rises once and then holds. There is no
-  floating, no pulsing, no glow: the only time-varying things after the entrance
-  are the rings that point at a value and the typed install command.
+  floating, no pulsing, no glow: after the entrance the only thing still moving
+  is the typed install command.
 - **The subtitle is the only centred element**, because the subtitle is the voice.
 
 ## How it is put together

@@ -6,10 +6,10 @@
     {
       "id": "intro",
       "kicker": "DSH PLUGIN",
-      "title": "这台机器花了多少钱？",
+      "title": "别的都有，dsh 没有",
       "qualifier": "dsh-local-usage · 本机用量统计面板",
-      "text": "你的 DSH 这个月花了多少钱？这个插件让你一眼看清。",
-      "caption": "你的 DSH 这个月花了多少钱？\n这个插件让你一眼看清",
+      "text": "其他 agent 工具都有用量统计，看 dsh 没有，就顺手 vibe 了一个。",
+      "caption": "其他 agent 工具都有用量统计\n看 dsh 没有，就顺手 vibe 了一个",
       "facts": [
         [
           "version",

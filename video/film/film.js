@@ -56,42 +56,6 @@ function enter(node, t, from, to, distance = 20) {
   node.style.transform = `translateY(${((1 - p) * distance).toFixed(2)}px)`
 }
 
-/** Place a ring and fade it in across its own window. */
-function ring(node, t, from, to, box) {
-  node.style.left = `${box.left}px`
-  node.style.top = `${box.top}px`
-  node.style.width = `${box.width}px`
-  node.style.height = `${box.height}px`
-  node.style.opacity = String(ramp(t, from, to))
-}
-
-/* Geometry in stage pixels, derived from each capture's own CSS size.
- *  - the calendar closeup is 1322x279 shown at 1712 wide (k = 1.295);
- *  - the day page is 1680x441 shown at 1712 (k = 1.019);
- *  - the panel band behind the hover card is the same shot, scrolled to y 300. */
-
-const CAL = { left: 104, top: 424, k: 1712 / 1322 }
-const DAY = { left: 104, top: 424, k: 1712 / 1680 }
-const BAND = { left: 104, top: 424, k: 1712 / 1680, scroll: 300 }
-
-/** Translate a rectangle from a capture's own CSS pixels into stage pixels. */
-function place(frame, box) {
-  return {
-    left: Math.round(frame.left + box.x * frame.k),
-    top: Math.round(frame.top + (box.y - (frame.scroll ?? 0)) * frame.k),
-    width: Math.round(box.w * frame.k),
-    height: Math.round(box.h * frame.k),
-  }
-}
-
-const RINGS = {
-  total: place(CAL, { x: 1188, y: 12, w: 124, h: 42 }),
-  grid: place(CAL, { x: 30, y: 92, w: 1276, h: 160 }),
-  tooltip: place(BAND, { x: 1292, y: 312, w: 219, h: 151 }),
-  'day-tiles': place(DAY, { x: 226, y: 158, w: 1263, h: 96 }),
-  'day-projects': place(DAY, { x: 226, y: 272, w: 1263, h: 140 }),
-}
-
 /** The install line the CTA types out: the npm package name is the short form. */
 const INSTALL = 'dsh plugin add dsh-local-usage'
 
@@ -107,8 +71,6 @@ const PAINTERS = {
   },
   calendar: t => {
     enter(need('shot-calendar'), t, 0.3, 0.9, 24)
-    ring(need('ring-total'), t, 1.3, 1.75, RINGS.total)
-    ring(need('ring-grid'), t, 3.1, 3.55, RINGS.grid)
   },
   day: t => {
     const board = need('shot-tooltip')
@@ -116,11 +78,6 @@ const PAINTERS = {
     const opened = ramp(t, 2.4, 2.8)
     board.style.opacity = String(1 - opened)
     page.style.opacity = String(opened)
-    // The hover ring belongs to the band; it leaves with it when the page opens.
-    ring(need('ring-tooltip'), t, 0.55, 1.0, RINGS.tooltip)
-    need('ring-tooltip').style.opacity = String(ramp(t, 0.55, 1.0) * (1 - opened))
-    ring(need('ring-day-tiles'), t, 3.3, 3.75, RINGS['day-tiles'])
-    ring(need('ring-day-projects'), t, 4.8, 5.25, RINGS['day-projects'])
     // The page itself is the entrance for the second half of the scene.
     page.style.transform = `translateY(${((1 - opened) * 16).toFixed(2)}px)`
   },
