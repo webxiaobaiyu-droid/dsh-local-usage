@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>dsh-local-usage · cover 4:3</title>
+    <style>
+      /* The 16:9 cover re-stacked for a 4:3 frame: 1600x1200 CSS, captured at
+       * 2x for a 3200x2400 PNG. Same story, more air between the lines. */
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        width: 1600px;
+        height: 1200px;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+        background: linear-gradient(180deg, #ffffff 0%, #f2f5fb 62%, #e9eefb 100%);
+        color: #16181d;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { position: relative; width: 1600px; height: 1200px; }
+      .glow {
+        position: absolute;
+        right: -300px;
+        top: -340px;
+        width: 1080px;
+        height: 1080px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0) 62%);
+      }
+      header { position: absolute; left: 100px; top: 108px; width: 1120px; }
+      .wordmark { display: flex; align-items: center; gap: 18px; font-size: 76px; font-weight: 680; letter-spacing: -1.6px; }
+      .dot { width: 17px; height: 17px; border-radius: 50%; background: #3b82f6; box-shadow: 0 0 0 7px rgba(59, 130, 246, 0.16); }
+      .tagline { margin-top: 26px; font-size: 40px; line-height: 1.42; color: #40454d; letter-spacing: 0.6px; }
+      .tagline b { color: #1d4ed8; font-weight: 650; }
+      .meta { margin-top: 32px; display: flex; gap: 14px; }
+      .chip {
+        padding: 13px 24px;
+        border-radius: 999px;
+        background: #fff;
+        border: 1px solid rgba(22, 24, 29, 0.08);
+        box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+        font-size: 24px;
+        color: #5b6068;
+      }
+      .price {
+        position: absolute;
+        right: 100px;
+        top: 124px;
+        text-align: right;
+      }
+      .price em { display: block; font-style: normal; font-size: 24px; color: #8b9098; letter-spacing: 1px; }
+      .price b { display: block; margin-top: 6px; font-size: 64px; font-weight: 680; letter-spacing: -1px; color: #1d4ed8; }
+      .install {
+        position: absolute;
+        left: 100px;
+        right: 100px;
+        top: 586px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 30px 38px;
+        border-radius: 16px;
+        background: #16181d;
+        box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+        font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, Menlo, monospace;
+        font-size: 30px;
+        color: #eaeef5;
+      }
+      .install .prompt { color: #6ee7a8; margin-right: 16px; }
+      .install .npm { font-size: 22px; color: rgba(234, 238, 245, 0.45); }
+      .shot {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 84px;
+        width: 1440px;
+        border-radius: 20px;
+        box-shadow: 0 40px 100px rgba(16, 24, 40, 0.18);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="glow"></div>
+      <header>
+        <div class="wordmark"><span class="dot"></span>dsh-local-usage</div>
+        <div class="tagline">别的 agent 工具都有用量统计<br />给 DSH <b>顺手 vibe 了一个</b></div>
+        <div class="meta">
+          <span class="chip">本机日志 · 不联网</span>
+          <span class="chip">按项目拆分</span>
+          <span class="chip">费率可配置</span>
+        </div>
+      </header>
+      <div class="price"><em>近 52 周花费</em><b>¥3,578.99</b></div>
+      <div class="install">
+        <span><span class="prompt">$</span>dsh plugin add dsh-local-usage</span>
+        <span class="npm">npmjs.com/package/dsh-local-usage</span>
+      </div>
+      <img class="shot" src="../assets/panel-calendar-light.png" alt="用量热力图" />
+    </div>
+  </body>
+</html>

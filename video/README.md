@@ -7,6 +7,8 @@ no screen recording, no stock footage, no editor project.
 |---|---|
 | `out/dsh-local-usage-promo.mp4` | 1920×1080, 30 fps, H.264 High + AAC, ~3 MB |
 | `out/cover.png` | 3840×2160 upload cover |
+| `out/cover-16x9.png` | 3840×2160 promo still with the vibe-story tagline and the install line |
+| `out/cover-4x3.png` | 3200×2400 promo still, the same story re-stacked for 4:3 feeds |
 | `out/dsh-local-usage-promo.srt` | the same captions as a sidecar track |
 
 ```sh
@@ -94,7 +96,7 @@ lands near -16 LUFS and the pad about 26 dB below it; `--no-bed` drops it.
 | Demo numbers, project names, spikes | `panel/fixture.ts` |
 | Rates the film shows | the table markup in `film/index.html`, plus `DEFAULT_CONFIG` in `src/index.ts` if the shipped rates moved |
 | Palette, type, layout | `film/film.css`; scene motion in `film/film.js` |
-| Cover | `film/cover.html` |
+| Cover | `film/cover.html`, `film/cover-16x9.html`, `film/cover-4x3.html` |
 
 Voices worth trying: `zh-CN-YunxiNeural` (default, young male, conversational),
 `zh-CN-XiaoxiaoNeural` (warm female), `zh-CN-YunjianNeural` (energetic male),
