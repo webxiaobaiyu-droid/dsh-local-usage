@@ -1,0 +1,137 @@
+{
+  "engine": "edge",
+  "voice": "zh-CN-YunxiNeural",
+  "rate": "+6%",
+  "scenes": [
+    {
+      "id": "intro",
+      "kicker": "DSH PLUGIN",
+      "title": "这台机器花了多少钱？",
+      "qualifier": "dsh-local-usage · 本机用量统计面板",
+      "text": "你的 DSH 这个月花了多少钱？这个插件让你一眼看清。",
+      "caption": "你的 DSH 这个月花了多少钱？\n这个插件让你一眼看清",
+      "facts": [
+        [
+          "version",
+          "0.3.0"
+        ],
+        [
+          "license",
+          "MIT"
+        ]
+      ]
+    },
+    {
+      "id": "source",
+      "kicker": "DATA SOURCE · 本机会话日志",
+      "title": "读的是会话日志",
+      "qualifier": "每次调用的 token 折成钱，全部在本机完成",
+      "text": "它读本机的会话日志，把每次调用的 token 折成钱。全程不出网。",
+      "caption": "它读本机的会话日志\n把每次调用的 token 折成钱，全程不出网",
+      "facts": [
+        [
+          "sessions",
+          "128"
+        ],
+        [
+          "unreadable",
+          "0"
+        ],
+        [
+          "network",
+          "none"
+        ]
+      ]
+    },
+    {
+      "id": "calendar",
+      "kicker": "CALENDAR · 热力图",
+      "title": "一年 52 周，一天一格",
+      "qualifier": "颜色越深，那天花得越多",
+      "text": "一天一格，颜色越深花得越多。鼠标放上去，当天的花费和调用次数都在。",
+      "caption": "一天一格，颜色越深花得越多\n悬停看当天花费和调用次数",
+      "facts": [
+        [
+          "weeks",
+          "52"
+        ],
+        [
+          "total",
+          "¥3,578.99"
+        ]
+      ]
+    },
+    {
+      "id": "day",
+      "kicker": "DAY VIEW · 单日明细",
+      "title": "点开任意一天",
+      "qualifier": "当天的花费，按工作目录拆开",
+      "text": "点开某一天，花费按工作目录拆开：哪个项目烧得多，一眼就有数。",
+      "caption": "点开某一天，花费按工作目录拆开\n哪个项目烧得多，一眼有数",
+      "facts": [
+        [
+          "date",
+          "2026-09-18"
+        ],
+        [
+          "cost",
+          "¥66.04"
+        ]
+      ]
+    },
+    {
+      "id": "pricing",
+      "kicker": "PRICING · 计价方式",
+      "title": "费率和时段可以自己配",
+      "qualifier": "公式、费率、高峰时段，都写在面板上",
+      "text": "费率和高峰时段都能自己配，计算公式就写在面板上，不用猜。",
+      "caption": "费率和高峰时段都能自己配\n公式就写在面板上",
+      "facts": [
+        [
+          "currency",
+          "CNY"
+        ],
+        [
+          "unit",
+          "per 1M tokens"
+        ]
+      ]
+    },
+    {
+      "id": "install",
+      "kicker": "INSTALL · 安装",
+      "title": "一行命令，或一个对话框",
+      "qualifier": "命令行和 dsh 的插件对话框，装法随你",
+      "text": "安装只要一行命令。也可以打开 dsh 的插件对话框，粘贴包名，点安装。",
+      "caption": "安装只要一行命令\n也可以在插件对话框里粘贴包名",
+      "facts": [
+        [
+          "package",
+          "dsh-local-usage"
+        ],
+        [
+          "registry",
+          "npmjs.com"
+        ]
+      ]
+    },
+    {
+      "id": "outro",
+      "kicker": "NPM · 已发布",
+      "title": "npm 上就能装",
+      "qualifier": "免费、开源，数据不出本机",
+      "text": "在 npm 搜索 dsh-local-usage，现在就可以装上。",
+      "caption": "npm 搜索 dsh-local-usage\n现在就可以装上",
+      "facts": [
+        [
+          "package",
+          "dsh-local-usage"
+        ],
+        [
+          "license",
+          "MIT"
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>dsh-local-usage · promo film</title>
+    <link rel="stylesheet" href="./film.css" />
+  </head>
+  <body>
+    <!--
+      One page, one chrome, seven content layers.
+
+      The chrome — section kicker, title, qualifier, the fact corner and the
+      subtitle — is written from `timings.js` as the film advances, so a scene is
+      a content layer plus five strings rather than a hand-built slide. Every
+      animated property is a pure function of time: `window.__film.render(t)`
+      paints the frame at `t` and nothing runs on a CSS transition or a timer,
+      which is what keeps the picture and the narration from drifting apart.
+    -->
+    <div class="stage" id="stage">
+      <!-- Chrome: present in every scene, re-written at each cut. -->
+      <div class="kicker" id="kicker"></div>
+      <dl class="facts" id="facts"></dl>
+      <h1 class="title" id="title"></h1>
+      <p class="qualifier" id="qualifier"></p>
+      <div class="rule" id="rule"></div>
+      <div class="subs" id="subs"><div class="line" id="subs-line"></div></div>
+      <div class="progress" id="progress"></div>
+
+      <!-- 1. What it is: the whole panel, once. -->
+      <section class="layer" id="layer-intro">
+        <figure class="shot" id="shot-intro">
+          <img src="../assets/panel-year-light.png" alt="用量统计面板" />
+        </figure>
+      </section>
+
+      <!-- 2. Where the numbers come from: the log itself. -->
+      <section class="layer" id="layer-source">
+        <div class="logline" id="logline">
+          <span class="path">~/.dsh/sessions/<span class="dim">--Users-demo-work-atlas-web--</span>/session-9ae63359-a2e7-4265-b116-578cdc2dd232/<span class="file">session.v3.jsonl.zstd</span></span>
+        </div>
+        <div class="notes" id="source-notes">
+          <p>一次 <span class="k">assistant/message</span> 事件带一份 provider 上报的 usage</p>
+          <p>按 <span class="k">turn / step</span> 槽位去重，重试单独计费</p>
+          <p>归档的会话照样读，删除的才算没有</p>
+        </div>
+      </section>
+
+      <!-- 3. The calendar. -->
+      <section class="layer" id="layer-calendar">
+        <figure class="shot shot--plate" id="shot-calendar">
+          <img src="../assets/panel-calendar-light.png" alt="用量热力图" />
+        </figure>
+        <div class="ring" id="ring-total"></div>
+        <div class="ring" id="ring-grid"></div>
+      </section>
+
+      <!-- 4. Hover, then the day page it opens. -->
+      <section class="layer" id="layer-day">
+        <figure class="shot" id="shot-tooltip">
+          <img src="../assets/panel-tooltip-light.png" alt="悬停卡片" />
+        </figure>
+        <div class="ring" id="ring-tooltip"></div>
+        <figure class="shot" id="shot-day">
+          <img src="../assets/panel-day-light.png" alt="单日明细" />
+        </figure>
+        <div class="ring" id="ring-day-tiles"></div>
+        <div class="ring" id="ring-day-projects"></div>
+      </section>
+
+      <!-- 5. How the money is computed. -->
+      <section class="layer" id="layer-pricing">
+        <div class="card" id="rate-card">
+          <div class="rate-head">当前生效费率 <span>CNY / 百万 tokens</span></div>
+          <table class="rate-table">
+            <thead>
+              <tr><th>匹配</th><th>输入</th><th>缓存命中</th><th>缓存写入</th><th>输出</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>v4-pro</td><td>4.5</td><td>0.15</td><td>4.5</td><td>13.5</td></tr>
+              <tr><td>flash</td><td>1</td><td>0.02</td><td>1</td><td>4</td></tr>
+              <tr class="muted"><td>默认费率</td><td>1</td><td>0.02</td><td>1</td><td>4</td></tr>
+            </tbody>
+          </table>
+          <div class="rate-foot">
+            花费 = Σ（token × 费率）÷ 1,000,000<br />
+            高峰 09:00–12:00、14:00–18:00（北京时间）费率 ×2
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Install: the command, or the client's own add-plugin dialog. -->
+      <section class="layer" id="layer-install">
+        <div class="code" id="code">
+          <span class="prompt">$</span><span id="typed"></span><span class="caret" id="caret"></span>
+        </div>
+        <div class="install-hints" id="install-hints">
+          <p>对话框里粘贴同一个包名：<span class="k">dsh-local-usage</span></p>
+          <p>安装源保持「默认安装源」，点安装</p>
+        </div>
+        <figure class="dialog-shot" id="dialog-shot">
+          <img src="./plugin-dialog.png" alt="dsh 添加插件对话框" />
+        </figure>
+        <div class="dialog-caption" id="dialog-caption">dsh 客户端 · 插件 → 添加插件</div>
+      </section>
+
+      <!-- 7. Where it lives: the npm card the film ends on. -->
+      <section class="layer" id="layer-outro">
+        <div class="npm-card" id="npm-card">
+          <div class="npm-head">npm <span>package</span></div>
+          <div class="npm-url">npmjs.com/package/<span>dsh-local-usage</span></div>
+          <dl class="npm-rows">
+            <dt>install</dt>
+            <dd>dsh plugin add dsh-local-usage</dd>
+            <dt>repo</dt>
+            <dd>github.com/webxiaobaiyu-droid/dsh-local-usage</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <script src="./timings.js"></script>
+    <script src="./film.js"></script>
+  </body>
+</html>

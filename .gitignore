@@ -6,3 +6,15 @@ node_modules/
 # lib/ is intentionally NOT ignored: this plugin is distributed from git, and a
 # checked-in build keeps installation independent of whether the installer runs
 # dependency scripts (pnpm blocks them by default until approved).
+
+# Promo film: the pipeline and its copy are sources, everything it renders is
+# build output (hundreds of megabytes of frames) and stays out of the history.
+video/frames/
+video/probe/
+video/assets/
+video/out/
+video/film/timings.js
+
+
+# Local TTS runtime for the promo film (edge-tts); not part of the package.
+.venv-tts/

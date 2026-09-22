@@ -1,0 +1,529 @@
+/**
+ * Styles for the promotional film.
+ *
+ * The page is a document, not a poster: a section kicker top-left, the fact
+ * corner top-right, a left-aligned title block, one content card, a hairline,
+ * and the spoken line centred at the bottom. The only centred element is the
+ * subtitle, because the subtitle is the voice.
+ *
+ * Two rules the capture depends on:
+ *  - the stage is exactly 1920x1080 and clips, so no stray element can change
+ *    the frame size between captures;
+ *  - every animated property is written inline by `film.js`, so no transition or
+ *    keyframe may live here — CSS motion would keep moving while a frame is
+ *    being taken.
+ */
+
+:root {
+  /* The panel's own palette: this film and the product it shows agree. */
+  --paper: #f7f8fa;
+  --card: #ffffff;
+  --ink: #16181d;
+  --ink-2: #5b6068;
+  --ink-3: #8b9098;
+  --rule: rgba(22, 24, 29, 0.09);
+  --rule-strong: rgba(22, 24, 29, 0.16);
+  --blue: #3b82f6;
+  --blue-deep: #2563eb;
+  --night: #16181d;
+
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, Menlo, 'PingFang SC', monospace;
+
+  --pad: 104px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.stage[data-theme='night'] {
+  background: var(--night);
+  color: #f2f4f8;
+}
+
+/* ---------- Chrome ---------- */
+
+.kicker {
+  position: absolute;
+  left: var(--pad);
+  top: 74px;
+  font-family: var(--mono);
+  font-size: 21px;
+  letter-spacing: 1.6px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+
+.stage[data-theme='night'] .kicker {
+  color: rgba(242, 244, 248, 0.5);
+}
+
+.facts {
+  position: absolute;
+  right: var(--pad);
+  top: 74px;
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 20px;
+  justify-content: end;
+  font-family: var(--mono);
+  font-size: 21px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.facts dt {
+  color: var(--ink-3);
+  text-align: right;
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--ink);
+  text-align: left;
+}
+
+.stage[data-theme='night'] .facts dt {
+  color: rgba(242, 244, 248, 0.45);
+}
+
+.stage[data-theme='night'] .facts dd {
+  color: #f2f4f8;
+}
+
+.title {
+  position: absolute;
+  left: var(--pad);
+  top: 196px;
+  margin: 0;
+  font-size: 76px;
+  font-weight: 650;
+  letter-spacing: -1.4px;
+  line-height: 1.1;
+}
+
+.qualifier {
+  position: absolute;
+  left: var(--pad);
+  top: 300px;
+  margin: 0;
+  max-width: 1200px;
+  font-size: 30px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.stage[data-theme='night'] .qualifier {
+  color: rgba(242, 244, 248, 0.66);
+}
+
+.rule {
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  top: 918px;
+  height: 1px;
+  background: var(--rule);
+}
+
+.stage[data-theme='night'] .rule {
+  background: rgba(242, 244, 248, 0.16);
+}
+
+.subs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 944px;
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+}
+
+.subs .line {
+  max-width: 1500px;
+  font-size: 33px;
+  line-height: 1.5;
+  text-align: center;
+  white-space: pre-line;
+  color: var(--ink);
+}
+
+.stage[data-theme='night'] .subs .line {
+  color: #eef1f6;
+}
+
+.progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 0;
+  background: var(--blue);
+}
+
+/* ---------- Content layers ---------- */
+
+.layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+/* Screenshots are real captures of the shipping panel; the frame around them is
+ * chrome the panel itself does not have, so it stays thin: a hairline and the
+ * page's own shadow. Two of them are windows onto a larger capture — the intro
+ * shows the panel's top band, the hover card shows the calendar area — because a
+ * 1680x835 panel does not fit a 510px content band at full width. */
+.shot {
+  position: absolute;
+  margin: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.1);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+}
+
+/* The panel's own top band, cut where its calendar card begins, so the crop
+ * lands on a card boundary instead of through the middle of one. */
+#shot-intro {
+  left: var(--pad);
+  top: 529px;
+  width: 1712px;
+  height: 300px;
+}
+
+#shot-calendar {
+  left: var(--pad);
+  top: 424px;
+  width: 1712px;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  box-shadow: 0 22px 54px rgba(16, 24, 40, 0.11);
+}
+
+#shot-calendar img {
+  border-radius: 10px;
+}
+
+#shot-tooltip {
+  left: var(--pad);
+  top: 424px;
+  width: 1712px;
+  height: 420px;
+}
+
+/* Scrolled to the calendar band of the same capture, where the hover card sits. */
+#shot-tooltip img {
+  position: absolute;
+  left: 0;
+  top: -306px;
+  width: 1712px;
+}
+
+#shot-day {
+  left: var(--pad);
+  top: 424px;
+  width: 1712px;
+}
+
+/* ---------- The log line ---------- */
+
+.logline {
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  top: 424px;
+  padding: 34px 40px;
+  border-radius: 14px;
+  background: var(--night);
+  color: #e8ecf4;
+  font-family: var(--mono);
+  font-size: 27px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.logline .dim {
+  color: rgba(232, 236, 244, 0.45);
+}
+
+.logline .file {
+  color: #8ab4ff;
+}
+
+.notes {
+  position: absolute;
+  left: var(--pad);
+  top: 596px;
+  width: 1100px;
+}
+
+.notes p {
+  margin: 0 0 22px;
+  font-size: 29px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.notes .k {
+  font-family: var(--mono);
+  font-size: 26px;
+  color: var(--ink);
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 6px;
+  padding: 3px 10px;
+}
+
+/* ---------- Rings and their labels ---------- */
+
+.ring {
+  position: absolute;
+  border: 2px solid var(--blue);
+  border-radius: 10px;
+  opacity: 0;
+}
+
+/* ---------- Rate card ---------- */
+
+.card {
+  position: absolute;
+  left: var(--pad);
+  top: 400px;
+  width: 1712px;
+  padding: 46px 54px 40px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.1);
+}
+
+.rate-head {
+  font-size: 31px;
+  font-weight: 600;
+}
+
+.rate-head span {
+  margin-left: 16px;
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--ink-3);
+  font-family: var(--mono);
+}
+
+.rate-table {
+  width: 1120px;
+  margin-top: 28px;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 28px;
+}
+
+.rate-table th {
+  padding: 0 0 14px;
+  text-align: right;
+  font-family: var(--font);
+  font-size: 23px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.rate-table th:first-child,
+.rate-table td:first-child {
+  text-align: left;
+}
+
+.rate-table td {
+  padding: 19px 0;
+  text-align: right;
+  border-top: 1px solid var(--rule);
+}
+
+.rate-table tbody tr:first-child td {
+  border-top: 1px solid var(--rule-strong);
+}
+
+.rate-table tr.muted td {
+  color: var(--ink-3);
+}
+
+.rate-foot {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px dashed var(--rule-strong);
+  font-size: 24px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+/* ---------- Install ---------- */
+
+.code {
+  position: absolute;
+  left: var(--pad);
+  top: 424px;
+  width: 872px;
+  padding: 44px 50px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: var(--mono);
+  font-size: 36px;
+  color: #eaeef5;
+  overflow-wrap: anywhere;
+}
+
+.prompt {
+  color: #6ee7a8;
+  margin-right: 16px;
+}
+
+.caret {
+  display: inline-block;
+  width: 12px;
+  height: 34px;
+  margin-left: 6px;
+  vertical-align: -5px;
+  background: #9dc1ff;
+}
+
+/* The left column's footnotes: what to do with the dialog on the right. */
+.install-hints {
+  position: absolute;
+  left: var(--pad);
+  top: 640px;
+  width: 872px;
+}
+
+.install-hints p {
+  margin: 0 0 18px;
+  font-size: 27px;
+  line-height: 1.5;
+  color: rgba(242, 244, 248, 0.66);
+}
+
+.install-hints .k {
+  font-family: var(--mono);
+  font-size: 25px;
+  color: #eaeef5;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 3px 10px;
+}
+
+/* The client's own add-plugin dialog, captured from the product. */
+.dialog-shot {
+  position: absolute;
+  left: 1056px;
+  top: 424px;
+  width: 760px;
+  margin: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+.dialog-shot img {
+  display: block;
+  width: 100%;
+}
+
+.dialog-caption {
+  position: absolute;
+  left: 1056px;
+  top: 793px;
+  font-family: var(--mono);
+  font-size: 22px;
+  color: rgba(242, 244, 248, 0.5);
+}
+
+/* ---------- Outro: the npm card ---------- */
+
+.npm-card {
+  position: absolute;
+  left: var(--pad);
+  top: 424px;
+  width: 1712px;
+  padding: 52px 56px 46px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.npm-head {
+  font-family: var(--mono);
+  font-size: 24px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: rgba(242, 244, 248, 0.5);
+}
+
+.npm-head span {
+  margin-left: 14px;
+  letter-spacing: 0.4px;
+  text-transform: none;
+  color: rgba(242, 244, 248, 0.35);
+}
+
+.npm-url {
+  margin-top: 22px;
+  font-family: var(--mono);
+  font-size: 54px;
+  line-height: 1.25;
+  color: #f2f4f8;
+}
+
+.npm-url span {
+  color: #9dc1ff;
+}
+
+.npm-rows {
+  margin: 34px 0 0;
+  padding-top: 26px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.16);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px 28px;
+  font-family: var(--mono);
+  font-size: 28px;
+  line-height: 1.5;
+}
+
+.npm-rows dt {
+  color: rgba(242, 244, 248, 0.45);
+}
+
+.npm-rows dd {
+  margin: 0;
+  color: #e8ecf4;
+}
