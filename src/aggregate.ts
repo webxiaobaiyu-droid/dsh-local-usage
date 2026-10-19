@@ -19,8 +19,8 @@ import type {} from '@deepseek-ai/dsh-llm-retry/types'
 // reliability fold counts, so context that could not be compacted is reported.
 import type {} from '@deepseek-ai/dsh-compaction/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { beijingClock, costOf, isPeakClock, selectRate } from './pricing.ts'
-import type { PeakWindow, PriceRate, PriceRule } from './pricing.ts'
+import { beijingClock, costOf, isPeakClock, matchModel, selectRate } from './pricing.ts'
+import type { ModelPrice, PeakWindow } from './pricing.ts'
 import { UNKNOWN_PROJECT } from './types.ts'
 import type {
   UsageCosted,
@@ -63,18 +63,14 @@ export interface SessionUsageInput {
 export interface PricingOptions {
   /** Currency the resulting cost figures are expressed in. */
   readonly currency: string
-  /** Configured rules in match order. */
-  readonly rules: readonly PriceRule[]
-  /** Rate used by a route no rule matches. */
-  readonly fallback: PriceRate
-  /** Per-route rates the reader saved, keyed by the exact `provider/model`. */
-  readonly overrides: ReadonlyMap<string, PriceRate>
+  /** Configured model cards in match order. */
+  readonly models: readonly ModelPrice[]
+  /** Card used by a route no model matches. */
+  readonly fallback: ModelPrice
   /** Parsed peak windows in Beijing time. */
   readonly peakWindows: readonly PeakWindow[]
   /** When true, Saturday and Sunday are never peak. */
   readonly peakWeekdaysOnly: boolean
-  /** Factor applied to every rate inside a peak window. */
-  readonly peakMultiplier: number
 }
 
 /** Report-level facts the Host supplies around a fold. */
@@ -507,14 +503,7 @@ export function buildReport(
       // most frequent allocation in this walk.
       const beijing = beijingClock(sample.time)
       const peak = isPeakClock(beijing, options.peakWindows, options.peakWeekdaysOnly)
-      const { rate, matched } = selectRate(
-        options.rules,
-        options.fallback,
-        sample.route,
-        peak,
-        options.peakMultiplier,
-        options.overrides,
-      )
+      const { rate, matched } = selectRate(options.models, options.fallback, sample.route, peak)
       const cost = costOf(sample.tokens, rate)
       firstSampleTime ??= sample.time
       lastSampleTime = sample.time
@@ -592,17 +581,20 @@ export function buildReport(
     }))
     .sort((left, right) => right.cost - left.cost || right.outputTokens - left.outputTokens)
 
-  // The rate each route is priced at, resolved off-peak: a sample's own
-  // selection has the peak multiplier baked in, and the editor below it edits
-  // the base rate the multiplier is applied to.
+  // The card each route is priced by, with both of its sets of prices. A route
+  // is a consumption row, not a price row: its settlements fall on both halves of
+  // the day, so stating one "effective rate" would publish a number no sample was
+  // billed at.
   const routeRates: UsageRouteRate[] = [...byRoute.entries()]
     .map(([route, bucket]) => {
-      const base = selectRate(options.rules, options.fallback, route, false, options.peakMultiplier, options.overrides)
+      const match = matchModel(options.models, options.fallback, route)
       return {
         route,
-        rate: base.rate,
-        source: base.source,
-        ...base.rule === undefined ? {} : { rule: base.rule },
+        ...match.source === 'fallback' ? {} : { model: match.card.match },
+        peakEnabled: match.card.peakEnabled,
+        peak: match.card.peak,
+        offPeak: match.card.offPeak,
+        source: match.source,
         tokens: bucketTokens(bucket),
       }
     })
@@ -632,21 +624,8 @@ export function buildReport(
     unpricedRoutes: [...unpricedRoutes].sort(),
     unpricedTokens,
     cached: meta.cached,
-    peakMultiplier: options.peakMultiplier,
-    prices: options.rules.map(rule => ({
-      match: rule.match,
-      input: rule.input,
-      cacheRead: rule.cacheRead,
-      cacheWrite: rule.cacheWrite,
-      output: rule.output,
-    })),
-    fallbackPrice: {
-      match: '',
-      input: options.fallback.input,
-      cacheRead: options.fallback.cacheRead,
-      cacheWrite: options.fallback.cacheWrite,
-      output: options.fallback.output,
-    },
+    prices: options.models,
+    fallbackPrice: options.fallback,
     routeRates,
     peakWindows: options.peakWindows.map(window => `${clock(window.start)}-${clock(window.end)}`),
     peakWeekdaysOnly: options.peakWeekdaysOnly,

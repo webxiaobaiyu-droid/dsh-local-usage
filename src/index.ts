@@ -29,7 +29,7 @@ import type { PricingOptions, ReliabilityDay, SessionUsageInput, UsageSample } f
 import { createFoldCache, foldCacheFilePath } from './fold-cache.ts'
 import type { FoldCache } from './fold-cache.ts'
 import { parsePeakWindow } from './pricing.ts'
-import type { PeakWindow, PriceRate, PriceRule } from './pricing.ts'
+import type { ModelPrice, PeakWindow, PriceRate } from './pricing.ts'
 import { createProgressTracker } from './progress.ts'
 import type { ProgressTracker } from './progress.ts'
 import { createRateStore, pricingFilePath, readRate, resolveDshHome } from './rates.ts'
@@ -69,7 +69,7 @@ export const name = 'dsh-local-usage'
 /** Services this plugin cannot work without: the carrier's route registry and the session reads. */
 export const inject = ['connection', 'sessionQuery']
 
-/** Rate card for one route family, in currency units per one million tokens. */
+/** One set of prices, in currency units per one million tokens. */
 export interface UsageInsightsPriceConfig {
   /** Cache-miss prompt tokens. */
   input: number
@@ -81,10 +81,25 @@ export interface UsageInsightsPriceConfig {
   output: number
 }
 
-/** One configured rate card and the route substring it claims. */
+/**
+ * One model's prices, with the prices it charges inside a peak window.
+ *
+ * The four numbers are the price outside a peak window — and the only price of a
+ * model that does not state a `peak` block, which is how a flat-priced model is
+ * written. Costing the same all day means leaving `peak` out, not setting a
+ * multiplier to one.
+ */
 export interface UsageInsightsModelConfig extends UsageInsightsPriceConfig {
   /** Case-insensitive substring matched against `provider/model`; the first match wins. */
   match: string
+  /** Prices inside a configured peak window; absent means the model is flat-priced. */
+  peak?: UsageInsightsPriceConfig
+}
+
+/** The card that prices a route no model claims; it may price peak separately too. */
+export type UsageInsightsFallbackConfig = UsageInsightsPriceConfig & {
+  /** Prices inside a configured peak window; absent means the fallback is flat-priced. */
+  readonly peak?: UsageInsightsPriceConfig
 }
 
 /** Plugin configuration; every field has a default, so the plugin mounts bare. */
@@ -93,14 +108,12 @@ export interface UsageInsightsConfig {
   currency: string
   /** Configured rate cards, matched in order. */
   models: UsageInsightsModelConfig[]
-  /** Rate used by a route no card matches. */
-  fallback: UsageInsightsPriceConfig
+  /** Card used by a route no model matches. */
+  fallback: UsageInsightsFallbackConfig
   /** Peak windows as `HH:MM-HH:MM` in Beijing time. */
   peakWindows: string[]
   /** When true, Saturday and Sunday are never peak. */
   peakWeekdaysOnly: boolean
-  /** Factor applied to every rate inside a peak window. */
-  peakMultiplier: number
   /**
    * Whether to fold the corpus in the background once the process is up.
    *
@@ -118,6 +131,8 @@ export interface UsageInsightsConfig {
 
 /** The published off-peak DeepSeek-V4.1-Flash card, in CNY per one million tokens. */
 const FLASH_RATE: UsageInsightsPriceConfig = { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 }
+/** The same model inside its peak windows; stated, not derived from the off-peak card. */
+const FLASH_PEAK: UsageInsightsPriceConfig = { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 }
 
 /**
  * Shipped defaults: DeepSeek's published off-peak CNY prices. A route served
@@ -128,13 +143,19 @@ const FLASH_RATE: UsageInsightsPriceConfig = { input: 1, cacheRead: 0.02, cacheW
 export const DEFAULT_CONFIG: UsageInsightsConfig = {
   currency: 'CNY',
   models: [
-    { match: 'v4-pro', input: 4.5, cacheRead: 0.15, cacheWrite: 4.5, output: 13.5 },
-    { match: 'flash', ...FLASH_RATE },
+    {
+      match: 'v4-pro',
+      input: 4.5,
+      cacheRead: 0.15,
+      cacheWrite: 4.5,
+      output: 13.5,
+      peak: { input: 9, cacheRead: 0.3, cacheWrite: 9, output: 27 },
+    },
+    { match: 'flash', ...FLASH_RATE, peak: FLASH_PEAK },
   ],
-  fallback: FLASH_RATE,
+  fallback: { ...FLASH_RATE, peak: FLASH_PEAK },
   peakWindows: ['09:00-12:00', '14:00-18:00'],
   peakWeekdaysOnly: true,
-  peakMultiplier: 2,
   warmup: true,
   // Long enough that the fold does not compete with the rest of the boot, short
   // enough that it is usually done before the reader opens the panel.
@@ -261,7 +282,6 @@ function resolveConfig(config: UsageInsightsConfig): UsageInsightsConfig {
     fallback: config.fallback ?? DEFAULT_CONFIG.fallback,
     peakWindows: config.peakWindows ?? DEFAULT_CONFIG.peakWindows,
     peakWeekdaysOnly: config.peakWeekdaysOnly ?? DEFAULT_CONFIG.peakWeekdaysOnly,
-    peakMultiplier: config.peakMultiplier ?? DEFAULT_CONFIG.peakMultiplier,
     warmup: config.warmup ?? DEFAULT_CONFIG.warmup,
     warmupDelayMs: config.warmupDelayMs ?? DEFAULT_CONFIG.warmupDelayMs,
   }
@@ -571,23 +591,57 @@ function describe(error: unknown): string {
 }
 
 
-/** Resolve the configured rate card, the reader's overrides, and the peak schedule. */
+/** One configured card as the pricing engine reads it. */
+function cardOf(
+  config: UsageInsightsPriceConfig & { readonly peak?: UsageInsightsPriceConfig },
+  match: string,
+): ModelPrice {
+  const offPeak: PriceRate = {
+    input: config.input,
+    cacheRead: config.cacheRead,
+    cacheWrite: config.cacheWrite,
+    output: config.output,
+  }
+  return config.peak === undefined
+    ? { match, peakEnabled: false, peak: { ...offPeak }, offPeak }
+    : { match, peakEnabled: true, peak: { ...config.peak }, offPeak }
+}
+
+/**
+ * Resolve the model cards, the reader's edits, and the peak schedule.
+ *
+ * The reader's stored edits are applied over the configured cards by model name:
+ * an edit is a change to the card, not a second card, so a model that arrives
+ * from configuration and one the reader has corrected are the same card in the
+ * report and in the editor.
+ *
+ * @param config - the merged plugin configuration.
+ * @param rates - the store of the reader's edits.
+ * @returns the options one fold prices with.
+ */
 function pricingOptions(config: UsageInsightsConfig, rates: RateStore): PricingOptions {
   const windows: PeakWindow[] = []
   for (const spec of config.peakWindows) {
     const window = parsePeakWindow(spec)
     if (window !== undefined) windows.push(window)
   }
-  const rules: PriceRule[] = config.models.map(model => ({ ...model }))
-  const fallback: PriceRate = { ...config.fallback }
+  const edits = rates.read()
+  const models: ModelPrice[] = config.models.map(model => {
+    const card = cardOf(model, model.match)
+    const edit = edits.get(card.match)
+    return edit === undefined ? card : { match: card.match, ...edit }
+  })
+  const configured = cardOf(config.fallback, '')
+  const fallbackEdit = edits.get('')
+  const fallback: ModelPrice = fallbackEdit === undefined
+    ? configured
+    : { match: '', ...fallbackEdit }
   return {
     currency: config.currency,
-    rules,
+    models,
     fallback,
-    overrides: rates.read(),
     peakWindows: windows,
     peakWeekdaysOnly: config.peakWeekdaysOnly,
-    peakMultiplier: config.peakMultiplier,
   }
 }
 

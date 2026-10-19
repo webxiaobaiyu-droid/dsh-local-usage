@@ -14,7 +14,7 @@
  */
 
 import { NO_RELIABILITY } from '../types.ts'
-import type { UsageInsightsReport, UsagePriceRow } from '../types.ts'
+import type { UsageInsightsReport, UsageModelPrice } from '../types.ts'
 
 /** Fields this panel can render without, either because they are optional in
  * meaning or because a Host of another build may not send them yet. */
@@ -22,8 +22,13 @@ export type WireReport =
   & Pick<UsageInsightsReport, 'generatedAt' | 'currency' | 'totals'>
   & Partial<UsageInsightsReport>
 
-/** Rate card used when the Host reported none; shows the figure was unpriced. */
-const NO_RATE: UsagePriceRow = { match: '', input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
+/** Card used when the Host reported none; shows the figure was unpriced. */
+const NO_RATE: UsageModelPrice = {
+  match: '',
+  peakEnabled: false,
+  peak: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+  offPeak: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+}
 
 /**
  * Fill every field the panel reads with a safe default.
@@ -46,7 +51,6 @@ export function normalizeReport(value: WireReport): UsageInsightsReport {
     unpricedRoutes: value.unpricedRoutes ?? [],
     unpricedTokens: value.unpricedTokens ?? 0,
     cached: value.cached ?? false,
-    peakMultiplier: value.peakMultiplier ?? 1,
     routeRates: (value.routeRates ?? []).map(route => ({ ...route, tokens: route.tokens ?? 0 })),
     prices: value.prices ?? [],
     fallbackPrice: value.fallbackPrice ?? NO_RATE,
