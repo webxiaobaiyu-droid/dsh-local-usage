@@ -25,12 +25,15 @@ function event(type: string, time: number, data: Record<string, unknown>, seq: n
 
 const PRICING: PricingOptions = {
   currency: 'CNY',
-  rules: [],
-  fallback: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
-  overrides: new Map(),
+  models: [],
+  fallback: {
+    match: '',
+    peakEnabled: false,
+    offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+    peak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+  },
   peakWindows: [],
   peakWeekdaysOnly: true,
-  peakMultiplier: 1,
 }
 
 describe('reliabilityOf', () => {

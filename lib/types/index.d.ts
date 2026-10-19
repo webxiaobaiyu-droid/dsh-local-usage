@@ -32,7 +32,7 @@ export declare const PROGRESS_PATH = "/api/dsh-local-usage/progress";
 export declare const name = "dsh-local-usage";
 /** Services this plugin cannot work without: the carrier's route registry and the session reads. */
 export declare const inject: string[];
-/** Rate card for one route family, in currency units per one million tokens. */
+/** One set of prices, in currency units per one million tokens. */
 export interface UsageInsightsPriceConfig {
     /** Cache-miss prompt tokens. */
     input: number;
@@ -43,25 +43,37 @@ export interface UsageInsightsPriceConfig {
     /** Generated tokens. */
     output: number;
 }
-/** One configured rate card and the route substring it claims. */
+/**
+ * One model's prices, with the prices it charges inside a peak window.
+ *
+ * The four numbers are the price outside a peak window — and the only price of a
+ * model that does not state a `peak` block, which is how a flat-priced model is
+ * written. Costing the same all day means leaving `peak` out, not setting a
+ * multiplier to one.
+ */
 export interface UsageInsightsModelConfig extends UsageInsightsPriceConfig {
     /** Case-insensitive substring matched against `provider/model`; the first match wins. */
     match: string;
+    /** Prices inside a configured peak window; absent means the model is flat-priced. */
+    peak?: UsageInsightsPriceConfig;
 }
+/** The card that prices a route no model claims; it may price peak separately too. */
+export type UsageInsightsFallbackConfig = UsageInsightsPriceConfig & {
+    /** Prices inside a configured peak window; absent means the fallback is flat-priced. */
+    readonly peak?: UsageInsightsPriceConfig;
+};
 /** Plugin configuration; every field has a default, so the plugin mounts bare. */
 export interface UsageInsightsConfig {
     /** Currency every cost figure is expressed in; the plugin performs no conversion. */
     currency: string;
     /** Configured rate cards, matched in order. */
     models: UsageInsightsModelConfig[];
-    /** Rate used by a route no card matches. */
-    fallback: UsageInsightsPriceConfig;
+    /** Card used by a route no model matches. */
+    fallback: UsageInsightsFallbackConfig;
     /** Peak windows as `HH:MM-HH:MM` in Beijing time. */
     peakWindows: string[];
     /** When true, Saturday and Sunday are never peak. */
     peakWeekdaysOnly: boolean;
-    /** Factor applied to every rate inside a peak window. */
-    peakMultiplier: number;
     /**
      * Whether to fold the corpus in the background once the process is up.
      *

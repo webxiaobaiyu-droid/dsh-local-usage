@@ -589,6 +589,10 @@ describe('the pricing route', () => {
 
   const RATE = { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 }
 
+  /** A flat-priced model card, as the editor writes one. */
+
+  const CARD = { peakEnabled: false, peak: RATE, offPeak: RATE }
+
   it('stores an override and bills a later report at it', async () => {
     const logs = new Map<string, FakeLog>([['a', { events: log(0, DAY_ONE, 1, 1) }]])
     const mounted = mount(logs, true)
@@ -597,33 +601,35 @@ describe('the pricing route', () => {
     const before = await report(mounted)
     const beforeCost = (before.totals as { cost: number }).cost
 
-    const response = await post(mounted, { set: { 'p/m': RATE } })
+    const response = await post(mounted, { models: { 'p/m': CARD } })
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ overrides: { 'p/m': RATE } })
+    expect(await response.json()).toEqual({ models: { 'p/m': CARD } })
 
     const after = await report(mounted)
     expect((after.totals as { cost: number }).cost).toBeGreaterThan(beforeCost)
     expect((after.routeRates as { route: string; source: string }[])[0])
-      .toMatchObject({ route: 'p/m', source: 'override' })
+      .toMatchObject({ route: 'p/m', source: 'model' })
   })
 
   it('clears an override with a null rate', async () => {
     const logs = new Map<string, FakeLog>([['a', { events: log(0, DAY_ONE, 1, 1) }]])
     const mounted = mount(logs, true)
 
-    await post(mounted, { set: { 'p/m': RATE } })
-    const cleared = await post(mounted, { set: { 'p/m': null } })
+    await post(mounted, { models: { 'p/m': CARD } })
+    const cleared = await post(mounted, { models: { 'p/m': null } })
 
-    expect(await cleared.json()).toEqual({ overrides: {} })
+    expect(await cleared.json()).toEqual({ models: {} })
   })
 
   it('refuses a body it cannot vouch for', async () => {
     const logs = new Map<string, FakeLog>([['a', { events: log(0, DAY_ONE, 1, 1) }]])
     const mounted = mount(logs, true)
 
-    expect((await post(mounted, { set: { 'p/m': { input: 1 } } })).status).toBe(400)
-    expect((await post(mounted, { set: { 'p/m': { ...RATE, output: -1 } } })).status).toBe(400)
-    expect((await post(mounted, { routes: {} })).status).toBe(400)
+    expect((await post(mounted, { models: { 'p/m': { offPeak: RATE } } })).status).toBe(400)
+    expect((await post(mounted, {
+      models: { 'p/m': { peakEnabled: true, peak: { ...RATE, output: -1 }, offPeak: RATE } },
+    })).status).toBe(400)
+    expect((await post(mounted, { set: {} })).status).toBe(400)
     expect((await post(mounted, { set: { '': RATE } })).status).toBe(400)
     // And nothing was written by any of them.
     const after = await report(mounted)

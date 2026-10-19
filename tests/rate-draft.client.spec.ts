@@ -1,90 +1,116 @@
 import { describe, expect, it } from 'vitest'
 import { draftsFrom, pendingUpdate, RATE_FIELDS } from '../src/client/rate-draft.ts'
-import type { UsageRouteRate } from '../src/types.ts'
+import type { ModelDrafts, ModelDraft } from '../src/client/rate-draft.ts'
+import type { UsageModelPrice } from '../src/types.ts'
 
 const FLASH = { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 }
-const CUSTOM = { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 }
+const STRICT = { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 }
 
-/** Two routes: one claimed by a rule, one the reader has already overridden. */
-const ROUTES: readonly UsageRouteRate[] = [
-  { route: 'p/flash-model', rate: FLASH, source: 'rule', rule: 'flash', tokens: 100 },
-  { route: 'p/other-model', rate: CUSTOM, source: 'override', tokens: 50 },
+/** Two cards: one that prices peak separately, one flat. */
+const CARDS: readonly UsageModelPrice[] = [
+  {
+    match: 'flash',
+    peakEnabled: true,
+    offPeak: FLASH,
+    peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+  },
+  {
+    match: 'strict-model',
+    peakEnabled: false,
+    offPeak: STRICT,
+    peak: STRICT,
+  },
 ]
 
-/** Rewrite one field of one route's draft. */
-function edit(route: string, field: string, value: string): ReturnType<typeof draftsFrom> {
-  const drafts = draftsFrom(ROUTES)
-  const row = drafts[route] as unknown as Record<string, string>
-  row[field] = value
+/** Rewrite one field of one card's draft. */
+function edit(model: string, set: 'peak' | 'offPeak', field: string, value: string): ModelDrafts {
+  const drafts = draftsFrom(CARDS)
+  const card = drafts[model] as unknown as Record<string, Record<string, string> & { peakEnabled: boolean }>
+  const target = set === 'peak' ? card.peak : card.offPeak
+  if (target !== undefined) target[field] = value
   return drafts
 }
 
 describe('draftsFrom', () => {
-  it('opens on the rates in effect', () => {
-    expect(draftsFrom(ROUTES)).toEqual({
-      'p/flash-model': { input: '1', cacheRead: '0.02', cacheWrite: '1', output: '4' },
-      'p/other-model': { input: '3', cacheRead: '0.3', cacheWrite: '3', output: '9' },
+  it('opens on both sets of prices, with the switch as configured', () => {
+    const drafts = draftsFrom(CARDS)
+    expect(drafts.flash).toEqual({
+      peakEnabled: true,
+      peak: { input: '2', cacheRead: '0.04', cacheWrite: '2', output: '8' },
+      offPeak: { input: '1', cacheRead: '0.02', cacheWrite: '1', output: '4' },
     })
+    expect(drafts['strict-model']?.peakEnabled).toBe(false)
   })
 })
 
 describe('pendingUpdate', () => {
   it('writes nothing when nothing was touched', () => {
-    expect(pendingUpdate(draftsFrom(ROUTES), ROUTES)).toEqual({ status: 'empty' })
+    expect(pendingUpdate(draftsFrom(CARDS), CARDS)).toEqual({ status: 'empty' })
   })
 
-  it('writes only the row that changed', () => {
-    const result = pendingUpdate(edit('p/flash-model', 'output', '5'), ROUTES)
+  it('writes only the card that changed, with both of its sets', () => {
+    const result = pendingUpdate(edit('flash', 'offPeak', 'output', '5'), CARDS)
     expect(result).toEqual({
       status: 'ready',
-      update: { set: { 'p/flash-model': { ...FLASH, output: 5 } } },
+      update: {
+        models: {
+          flash: {
+            peakEnabled: true,
+            peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+            offPeak: { ...FLASH, output: 5 },
+          },
+        },
+      },
     })
   })
 
-  it('fills the untouched buckets of a partially edited row from the rate in effect', () => {
-    const result = pendingUpdate(edit('p/other-model', 'input', '7'), ROUTES)
-    expect(result).toEqual({
-      status: 'ready',
-      update: { set: { 'p/other-model': { ...CUSTOM, input: 7 } } },
+  it('fills blank fields from the prices in effect', () => {
+    const result = pendingUpdate(edit('flash', 'peak', 'input', '7'), CARDS)
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.update.models.flash).toMatchObject({
+      peak: { input: 7, cacheRead: 0.04, cacheWrite: 2, output: 8 },
     })
   })
 
-  it('clears an override when every field of that row is emptied', () => {
-    const drafts = draftsFrom(ROUTES)
-    for (const field of RATE_FIELDS) {
-      (drafts['p/other-model'] as unknown as Record<string, string>)[field] = ''
-    }
-    expect(pendingUpdate(drafts, ROUTES)).toEqual({ status: 'ready', update: { set: { 'p/other-model': null } } })
+  it('drops the edit when both sets are blanked', () => {
+    const drafts = draftsFrom(CARDS)
+    const card = drafts['strict-model'] as ModelDraft
+    for (const field of RATE_FIELDS) card.offPeak[field] = ''
+    for (const field of RATE_FIELDS) card.peak[field] = ''
+    expect(pendingUpdate(drafts, CARDS))
+      .toEqual({ status: 'ready', update: { models: { 'strict-model': null } } })
   })
 
-  it('asks for nothing when a blank row was never overridden', () => {
-    const drafts = draftsFrom(ROUTES)
-    for (const field of RATE_FIELDS) {
-      (drafts['p/flash-model'] as unknown as Record<string, string>)[field] = ''
-    }
-    expect(pendingUpdate(drafts, ROUTES)).toEqual({ status: 'empty' })
+  it('writes the switch when it is turned on, even with no number typed', () => {
+    const drafts = draftsFrom(CARDS)
+    ;(drafts['strict-model'] as ModelDraft).peakEnabled = true
+    const result = pendingUpdate(drafts, CARDS)
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.update.models['strict-model']).toMatchObject({ peakEnabled: true })
   })
 
-  it('names the first field that is not a price', () => {
-    expect(pendingUpdate(edit('p/flash-model', 'cacheRead', 'cheap'), ROUTES))
-      .toEqual({ status: 'invalid', route: 'p/flash-model', field: 'cacheRead' })
-    expect(pendingUpdate(edit('p/flash-model', 'input', '-1'), ROUTES))
-      .toEqual({ status: 'invalid', route: 'p/flash-model', field: 'input' })
-  })
-
-  it('treats a blank field of a partly edited row as "keep the rate in effect"', () => {
-    const drafts = edit('p/flash-model', 'cacheRead', '  ')
-    const row = drafts['p/flash-model']
-    expect(row).toBeDefined()
-    if (row === undefined) return
-    row.input = '2'
-    expect(pendingUpdate(drafts, ROUTES)).toEqual({
-      status: 'ready',
-      update: { set: { 'p/flash-model': { ...FLASH, input: 2 } } },
+  it('names the card, the set and the field that is not a price', () => {
+    expect(pendingUpdate(edit('flash', 'peak', 'cacheRead', 'cheap'), CARDS)).toEqual({
+      status: 'invalid',
+      model: 'flash',
+      set: 'peak',
+      field: 'cacheRead',
+    })
+    expect(pendingUpdate(edit('flash', 'offPeak', 'input', '-1'), CARDS)).toEqual({
+      status: 'invalid',
+      model: 'flash',
+      set: 'offPeak',
+      field: 'input',
     })
   })
 
-  it('asks for nothing when an overridden row is left exactly as it is', () => {
-    expect(pendingUpdate(edit('p/other-model', 'output', '  '), ROUTES)).toEqual({ status: 'empty' })
+  it('does not validate the peak set of a model that does not price peak', () => {
+    // The switch is off, so those four fields are not read at all — a stray
+    // character there must not block a save that has nothing to do with them.
+    const drafts = edit('strict-model', 'peak', 'input', 'nonsense')
+    const result = pendingUpdate(drafts, CARDS)
+    expect(result).toEqual({ status: 'empty' })
   })
 })

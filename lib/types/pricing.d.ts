@@ -3,38 +3,55 @@
  *
  * The harness records tokens, never currency: `TokenUsage` is provider
  * accounting and no model price table exists in the repository. This module is
- * therefore the plugin's own rate card — prices are stated by configuration,
- * matched against the routed `provider/model`, and multiplied by the exact
- * bucket counts the session log reports.
+ * therefore the plugin's own rate card — prices are stated by configuration and
+ * applied to the exact bucket counts the session log reports.
+ *
+ * A card belongs to a **model**, not to a route. One model is sold through
+ * several vendor routes — `vendor-a:deepseek-v4-flash`,
+ * `vendor-b/cn:deepseek-v4-flash` — and they are the same model at the same
+ * price, so one card prices all of them. The report still states every route
+ * separately: pricing is shared, consumption is not.
+ *
+ * A card carries two complete sets of prices, one for settlements inside a peak
+ * window and one for those outside it, plus a switch saying whether peak pricing
+ * applies at all. There is no multiplier: both sets are stated rather than
+ * derived, so a model whose peak price is not twice its off-peak price is
+ * expressible, and a model with a single price turns the switch off.
  *
  * Peak windows follow the provider's published schedule, which is stated in
  * Beijing time (UTC+8, no daylight saving). Public holidays are NOT modelled,
- * so a holiday weekday inside a peak window is billed at the peak rate.
+ * so a holiday weekday inside a peak window is billed at the peak price.
  *
  * @module dsh-local-usage/pricing
  */
-import type { UsageRateSource, UsageTokens } from './types.ts';
+import type { UsageRate, UsageTokens } from './types.ts';
 /** Minutes to add to UTC to reach Beijing time; China observes no daylight saving. */
 export declare const BEIJING_OFFSET_MINUTES = 480;
 /** Currency units per one million tokens, split by the bucket the provider bills. */
-export interface PriceRate {
-    /** Cache-miss prompt tokens. */
-    readonly input: number;
-    /** Cache-hit prompt tokens. */
-    readonly cacheRead: number;
-    /** Cache-write prompt tokens. */
-    readonly cacheWrite: number;
-    /** Generated tokens. */
-    readonly output: number;
-}
-/** One configured rate card plus the route substring it claims. */
-export interface PriceRule extends PriceRate {
+export type PriceRate = UsageRate;
+/**
+ * One model's prices.
+ *
+ * `offPeak` is the price outside a peak window, and the only price of a model
+ * that does not price peak separately: the switch is what says which reading
+ * applies, so a flat model carries one meaningful set rather than two that happen
+ * to be equal.
+ */
+export interface ModelPrice {
     /**
-     * Case-insensitive substring matched against `provider/model`. The first rule
-     * in configuration order that matches wins, so specific rules precede
-     * general ones.
+     * Case-insensitive substring matched against the route, in configuration order.
+     *
+     * The model's own name is the useful value: a route that carries it anywhere is
+     * that model, whatever vendor prefix or namespace precedes it. The first card
+     * that matches wins, so specific names precede general ones.
      */
     readonly match: string;
+    /** Whether {@link peak} applies inside the configured windows. */
+    readonly peakEnabled: boolean;
+    /** Prices for a settlement inside a peak window. */
+    readonly peak: PriceRate;
+    /** Prices outside one; the only prices of a flat-priced model. */
+    readonly offPeak: PriceRate;
 }
 /** A half-open minute-of-day window `[start, end)` in Beijing time. */
 export interface PeakWindow {
@@ -62,12 +79,12 @@ export declare function beijingClock(time: number): {
  * Whether a resolved Beijing clock falls inside a configured peak window.
  *
  * Separate from {@link isPeakTime} so a fold that needs the clock for something
- * else — the hour-of-day split — resolves it once per sample instead of twice.
+ * else — the slice-of-day profile — resolves it once per sample instead of twice.
  *
  * @param clock - weekday and minutes after Beijing midnight.
  * @param windows - parsed peak windows in Beijing time.
  * @param weekdaysOnly - when true, Saturday and Sunday are never peak.
- * @returns true when the instant is billed at the peak rate.
+ * @returns true when the instant falls in a peak window.
  */
 export declare function isPeakClock(clock: {
     readonly weekday: number;
@@ -78,38 +95,54 @@ export declare function isPeakClock(clock: {
  * @param time - Unix epoch milliseconds.
  * @param windows - parsed peak windows in Beijing time.
  * @param weekdaysOnly - when true, Saturday and Sunday are never peak.
- * @returns true when the instant is billed at the peak rate.
+ * @returns true when the instant falls in a peak window.
  */
 export declare function isPeakTime(time: number, windows: readonly PeakWindow[], weekdaysOnly: boolean): boolean;
-/** Which card claimed a route, and at what rate. */
-export interface RateSelection {
-    /** Effective rate, peak multiplier already applied. */
-    readonly rate: PriceRate;
-    /** Whether a configured card — a rule or an override — claimed the route. */
-    readonly matched: boolean;
-    /** Where {@link rate} came from. */
-    readonly source: UsageRateSource;
-    /** The rule's `match` string, present only when `source` is `rule`. */
-    readonly rule?: string;
+/** Which card claimed a route. */
+export interface ModelMatch {
+    /** The card that prices the route. */
+    readonly card: ModelPrice;
+    /** Whether a configured model claimed it, or the fallback did. */
+    readonly source: 'model' | 'fallback';
 }
 /**
- * Select the rate card one route is priced with.
+ * Resolve the card a route is priced with.
  *
- * Three sources, in order: an exact per-route override the reader saved, then
- * the first substring rule that claims the route, then the fallback. The override
- * comes first because it is the only one written for a specific route; the
- * substring match is a convenient guess that can quietly claim a route it was
- * never meant for, which is why the report publishes the source alongside.
+ * The match is a substring of the route rather than an equality, because one
+ * model is sold under vendor prefixes and namespaces that differ by deployment:
+ * `deepseek-v4-flash` has to claim `workbuddy/cn:deepseek-v4-flash` and
+ * `vendor-a/deepseek-v4-flash` alike. The first card in configuration order that
+ * appears in the route wins, so a specific name can precede a general one.
  *
- * @param rules - configured rules in match order.
- * @param fallback - rate used when neither an override nor a rule applies.
+ * @param models - configured cards in match order.
+ * @param fallback - card used when no model claims the route.
  * @param route - `provider/model` the usage was attributed to.
- * @param peak - whether the sample is inside a peak window.
- * @param peakMultiplier - factor applied to every rate during peak windows.
- * @param overrides - per-route rates the reader saved, keyed by exact route.
- * @returns the effective rate, whether a configured card claimed it, and which.
+ * @returns the card and whether a configured model claimed the route.
  */
-export declare function selectRate(rules: readonly PriceRule[], fallback: PriceRate, route: string, peak: boolean, peakMultiplier: number, overrides?: ReadonlyMap<string, PriceRate>): RateSelection;
+export declare function matchModel(models: readonly ModelPrice[], fallback: ModelPrice, route: string): ModelMatch;
+/** Which card priced one settlement, and at which of its two sets of prices. */
+export interface RateSelection {
+    /** Effective prices for this settlement. */
+    readonly rate: PriceRate;
+    /** Whether a configured model — not the fallback — priced it. */
+    readonly matched: boolean;
+    /** Where the price came from. */
+    readonly source: 'model' | 'fallback';
+    /** The model's `match` string, present only when a configured model claimed it. */
+    readonly model?: string;
+    /** Whether the peak prices were used, which is false for a flat-priced model. */
+    readonly peakApplied: boolean;
+}
+/**
+ * Select the prices one settlement is billed at.
+ *
+ * @param models - configured cards in match order.
+ * @param fallback - card used when no model claims the route.
+ * @param route - `provider/model` the usage was attributed to.
+ * @param peak - whether the settlement falls inside a peak window.
+ * @returns the effective prices, their source, and whether peak pricing applied.
+ */
+export declare function selectRate(models: readonly ModelPrice[], fallback: ModelPrice, route: string, peak: boolean): RateSelection;
 /**
  * Price one bucket set at one rate.
  * @param tokens - bucket counts to price.

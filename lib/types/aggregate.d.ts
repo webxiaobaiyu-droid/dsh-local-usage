@@ -11,7 +11,7 @@
  * @module dsh-local-usage/aggregate
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types';
-import type { PeakWindow, PriceRate, PriceRule } from './pricing.ts';
+import type { ModelPrice, PeakWindow } from './pricing.ts';
 import type { UsageInsightsReport, UsageTokens } from './types.ts';
 /** Route label used when the log attributes a settlement to no `provider/model`. */
 export declare const UNKNOWN_ROUTE = "unknown";
@@ -38,18 +38,14 @@ export interface SessionUsageInput {
 export interface PricingOptions {
     /** Currency the resulting cost figures are expressed in. */
     readonly currency: string;
-    /** Configured rules in match order. */
-    readonly rules: readonly PriceRule[];
-    /** Rate used by a route no rule matches. */
-    readonly fallback: PriceRate;
-    /** Per-route rates the reader saved, keyed by the exact `provider/model`. */
-    readonly overrides: ReadonlyMap<string, PriceRate>;
+    /** Configured model cards in match order. */
+    readonly models: readonly ModelPrice[];
+    /** Card used by a route no model matches. */
+    readonly fallback: ModelPrice;
     /** Parsed peak windows in Beijing time. */
     readonly peakWindows: readonly PeakWindow[];
     /** When true, Saturday and Sunday are never peak. */
     readonly peakWeekdaysOnly: boolean;
-    /** Factor applied to every rate inside a peak window. */
-    readonly peakMultiplier: number;
 }
 /** Report-level facts the Host supplies around a fold. */
 export interface ReportMeta {

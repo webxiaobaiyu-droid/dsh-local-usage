@@ -69,6 +69,15 @@ export declare const css: {
     readonly cells: "dlu-cells";
     readonly controls: "dlu-controls";
     readonly editor: "dlu-editor";
+    readonly editorCard: "dlu-editorCard";
+    readonly editorCardName: "dlu-editorCardName";
+    readonly editorCardRow: "dlu-editorCardRow";
+    readonly editorCards: "dlu-editorCards";
+    readonly editorPriceField: "dlu-editorPriceField";
+    readonly editorPriceFields: "dlu-editorPriceFields";
+    readonly editorPriceLabel: "dlu-editorPriceLabel";
+    readonly editorPriceRow: "dlu-editorPriceRow";
+    readonly editorToggle: "dlu-editorToggle";
     readonly editorActions: "dlu-editorActions";
     readonly editorError: "dlu-editorError";
     readonly editorField: "dlu-editorField";

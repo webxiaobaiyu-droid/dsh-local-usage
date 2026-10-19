@@ -121,7 +121,7 @@ dsh plugin add /path/to/dsh-local-usage                               # 从本�
 | `fallback` | Flash 价目 | 没有任何价目命中的路由所用的费率。 |
 | `peakWindows` | `09:00-12:00`、`14:00-18:00` | 北京时间的高峰时段；留空即关闭高峰计价。 |
 | `peakWeekdaysOnly` | `true` | 周末是否始终按空闲时段计价。 |
-| `peakMultiplier` | `2` | 高峰时段对每条费率施加的倍数。 |
+| ``peak` 块（每个模型的高峰价）` | `2` | 高峰时段对每条费率施加的倍数。 |
 | `warmup` | `true` | 激活后先在后台折叠一次全部日志，使首次打开面板变成一次重新计价。 |
 | `warmupDelayMs` | `4000` | 后台折叠在激活后多久开始（毫秒）。 |
 

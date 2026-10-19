@@ -33,8 +33,12 @@ describe('normalizeReport', () => {
 
     expect(report.prices).toEqual([])
     expect(report.peakWindows).toEqual([])
-    expect(report.fallbackPrice).toEqual({ match: '', input: 0, cacheRead: 0, cacheWrite: 0, output: 0 })
-    expect(report.peakMultiplier).toBe(1)
+    expect(report.fallbackPrice).toEqual({
+      match: '',
+      peakEnabled: false,
+      peak: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      offPeak: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+    })
     expect(report.peakWeekdaysOnly).toBe(true)
     expect(report.models).toEqual([])
     expect(report.projects).toEqual([])
@@ -49,11 +53,20 @@ describe('normalizeReport', () => {
   it('leaves what the Host did send untouched', () => {
     const report = normalizeReport({
       ...LEGACY,
-      prices: [{ match: 'flash', input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 }],
-      fallbackPrice: { match: '', input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+      prices: [{
+        match: 'flash',
+        peakEnabled: true,
+        offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+        peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+      }],
+      fallbackPrice: {
+        match: '',
+        peakEnabled: false,
+        offPeak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+        peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+      },
       peakWindows: ['09:00-12:00'],
       peakWeekdaysOnly: false,
-      peakMultiplier: 2,
       cached: true,
       projects: [{
         path: '/work/api',
@@ -72,7 +85,6 @@ describe('normalizeReport', () => {
     expect(report.prices).toHaveLength(1)
     expect(report.peakWindows).toEqual(['09:00-12:00'])
     expect(report.peakWeekdaysOnly).toBe(false)
-    expect(report.peakMultiplier).toBe(2)
     expect(report.cached).toBe(true)
     // The project axis is what the day drill-down reads, so an older Host that
     // does not send it must degrade to an empty table, never to a blank panel.

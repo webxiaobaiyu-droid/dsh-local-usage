@@ -1,93 +1,66 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import { createRateStore, pricingFilePath, readRate, resolveDshHome } from '../src/rates.ts'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createRateStore } from '../src/rates.ts'
 
-const RATE = { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 }
+const RATE = { input: 1.5, cacheRead: 0.05, cacheWrite: 1.5, output: 6 }
 
-/** A fresh directory per test, so no two cases share a file. */
-async function storePath(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'dlu-rates-'))
-  return pricingFilePath(root)
-}
+let dir = ''
 
-/** Write a document the store will be asked to read, creating its directory. */
-async function writeDocument(path: string, body: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, body, 'utf8')
-}
+beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'dlu-rates-')) })
+afterEach(async () => { await rm(dir, { recursive: true, force: true }) })
 
-describe('readRate', () => {
-  it('accepts four non-negative finite prices', () => {
-    expect(readRate(RATE)).toEqual(RATE)
-    expect(readRate({ input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }))
-      .toEqual({ input: 0, cacheRead: 0, cacheWrite: 0, output: 0 })
-  })
-
-  it('rejects a missing bucket, a negative price, a non-number, and NaN', () => {
-    expect(readRate({ input: 1, cacheRead: 1, output: 1 })).toBeUndefined()
-    expect(readRate({ ...RATE, output: -1 })).toBeUndefined()
-    expect(readRate({ ...RATE, input: '1' })).toBeUndefined()
-    expect(readRate({ ...RATE, cacheRead: Number.NaN })).toBeUndefined()
-    expect(readRate(null)).toBeUndefined()
-  })
-
-  it('rejects an absurd price rather than persisting it', () => {
-    expect(readRate({ ...RATE, output: 1_000_001 })).toBeUndefined()
-  })
-})
-
-describe('resolveDshHome', () => {
-  it('prefers DSH_HOME and falls back to ~/.dsh', () => {
-    expect(resolveDshHome({ DSH_HOME: '/srv/dsh' }, '/Users/x')).toBe('/srv/dsh')
-    expect(resolveDshHome({ DSH_HOME: '  ' }, '/Users/x')).toBe('/Users/x/.dsh')
-    expect(resolveDshHome({}, '/Users/x')).toBe('/Users/x/.dsh')
-  })
-})
-
-describe('rate store', () => {
-  it('starts empty when the file is absent', async () => {
-    const store = createRateStore(await storePath())
-    expect(store.read().size).toBe(0)
-  })
-
-  it('writes, reads back, and clears one route', async () => {
-    const path = await storePath()
+describe('createRateStore', () => {
+  it('starts empty and writes a model edit', async () => {
+    const path = join(dir, 'pricing.json')
     const store = createRateStore(path)
-    expect(await store.write({ set: { 'p/a': RATE } })).toEqual({ 'p/a': RATE })
-    expect(createRateStore(path).read().get('p/a')).toEqual(RATE)
+    expect(store.read().size).toBe(0)
 
-    expect(await store.write({ set: { 'p/a': null } })).toEqual({})
+    const saved = await store.write({
+      models: { flash: { peakEnabled: true, peak: { ...RATE, input: 3 }, offPeak: RATE } },
+    })
+    expect(saved.flash).toMatchObject({ peakEnabled: true, offPeak: RATE })
+    // Re-read from disk: a fresh store sees the same table.
+    expect(createRateStore(path).read().get('flash')?.peak.input).toBe(3)
+  })
+
+  it('clears an edit with a null', async () => {
+    const path = join(dir, 'pricing.json')
+    const store = createRateStore(path)
+    await store.write({ models: { flash: { peakEnabled: false, peak: RATE, offPeak: RATE } } })
+    expect(await store.write({ models: { flash: null } })).toEqual({})
+  })
+
+  it('leaves a document from a future version alone', async () => {
+    const path = join(dir, 'pricing.json')
+    await writeFile(path, JSON.stringify({ version: 99, models: { flash: { peakEnabled: true, peak: RATE, offPeak: RATE } } }))
     expect(createRateStore(path).read().size).toBe(0)
   })
 
-  it('persists the document with its version', async () => {
-    const path = await storePath()
-    await createRateStore(path).write({ set: { 'p/a': RATE } })
-    const document = JSON.parse(await readFile(path, 'utf8')) as { version: number; routes: unknown }
-    expect(document.version).toBe(1)
-    expect(document.routes).toEqual({ 'p/a': RATE })
+  it('migrates a per-route table into cards that claim each route', async () => {
+    const path = join(dir, 'pricing.json')
+    await writeFile(path, JSON.stringify({ version: 1, routes: { 'vendor/cn:model-a': RATE } }))
+    const store = createRateStore(path)
+
+    // The old row becomes a card keyed by the route it was written for, so the
+    // migration never has to guess which part of a route is the model.
+    expect(store.read().get('vendor/cn:model-a')).toEqual({
+      peakEnabled: true,
+      // The legacy rows were billed at the shipped multiplier of two.
+      peak: { input: 3, cacheRead: 0.1, cacheWrite: 3, output: 12 },
+      offPeak: RATE,
+    })
   })
 
-  it('ignores a corrupt document instead of failing to mount', async () => {
-    const path = await storePath()
-    await writeDocument(path, 'not json at all')
-    expect(createRateStore(path).read().size).toBe(0)
-  })
+  it('writes the migrated table back as a v2 document on the next save', async () => {
+    const path = join(dir, 'pricing.json')
+    await writeFile(path, JSON.stringify({ version: 1, routes: { 'a/model': RATE } }))
+    const store = createRateStore(path)
+    await store.write({ models: { other: { peakEnabled: false, peak: RATE, offPeak: RATE } } })
 
-  it('ignores a document from a version it does not understand', async () => {
-    const path = await storePath()
-    await writeDocument(path, JSON.stringify({ version: 99, routes: { 'p/a': RATE } }))
-    expect(createRateStore(path).read().size).toBe(0)
-  })
-
-  it('drops entries it cannot vouch for and keeps the rest', async () => {
-    const path = await storePath()
-    await writeDocument(path, JSON.stringify({
-      version: 1,
-      routes: { 'p/a': RATE, 'p/b': { input: 1 }, '': RATE },
-    }))
-    expect([...createRateStore(path).read().keys()]).toEqual(['p/a'])
+    const document = JSON.parse(await readFile(path, 'utf8')) as { version: number; routes?: unknown }
+    expect(document.version).toBe(2)
+    expect(document.routes).toBeUndefined()
   })
 })

@@ -420,7 +420,7 @@ async function storedRevisions(ctx: Context): Promise<ReadonlyMap<string, string
  * @param folds - the durable fold cache, keyed by session id and log revision.
  * @param progress - publishes how far this read has got.
  * @param config - resolved plugin configuration.
- * @param rates - the reader's rate overrides.
+ * @param rates - the reader's price edits.
  * @param request - the window to fold and whether to discard the caches first.
  * @returns the complete priced report.
  */
@@ -631,6 +631,13 @@ function pricingOptions(config: UsageInsightsConfig, rates: RateStore): PricingO
     const edit = edits.get(card.match)
     return edit === undefined ? card : { match: card.match, ...edit }
   })
+  // An edit for a model the configuration does not name is still an edit, and it
+  // claims its own routes: this is what makes a migrated per-route price take
+  // effect, and what lets a reader price a model that ships without a card.
+  const named = new Set(models.map(card => card.match))
+  for (const [match, edit] of edits) {
+    if (match.length > 0 && !named.has(match)) models.push({ match, ...edit })
+  }
   const configured = cardOf(config.fallback, '')
   const fallbackEdit = edits.get('')
   const fallback: ModelPrice = fallbackEdit === undefined
@@ -725,8 +732,8 @@ async function handlePricing(
     )
   }
   try {
-    const overrides = await rates.write(update)
-    return Response.json({ overrides }, { headers })
+    const models = await rates.write(update)
+    return Response.json({ models }, { headers })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     ctx.logger.warn(`dsh-local-usage: pricing write failed: ${message}`)

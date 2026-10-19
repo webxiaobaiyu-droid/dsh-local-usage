@@ -27,7 +27,8 @@ import type { UsagePanelProps } from '../src/client/UsagePanel.tsx'
 import { DayDetail } from '../src/client/DayDetail.tsx'
 import { Popover } from '../src/client/Popover.tsx'
 import { RateEditor } from '../src/client/RateEditor.tsx'
-import type { UsageInsightsReport, UsageRouteRate } from '../src/types.ts'
+import type { UsageModelPrice } from '../src/types.ts'
+import type { UsageInsightsReport } from '../src/types.ts'
 
 /** A translate function that names its key, so markup can be searched for one. */
 const t = ((key: string, params?: Record<string, string>): string =>
@@ -45,16 +46,6 @@ function panelProps(): UsagePanelProps {
     usePanelInfo: (select: (info: { activePanelId: string }) => unknown) =>
       select({ activePanelId: 'usage' }),
   } as unknown as UsagePanelProps
-}
-
-/** One route the rate editor can offer. */
-function route(routeName: string): UsageRouteRate {
-  return {
-    route: routeName,
-    rate: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
-    source: 'fallback',
-    tokens: 100,
-  }
 }
 
 describe('the panel before its report arrives', () => {
@@ -120,7 +111,13 @@ describe('a day whose total is large', () => {
       // for a report has to carry the fold a report carries.
       days: [],
       slices: [],
-      peakMultiplier: 2,
+      prices: [],
+      fallbackPrice: {
+        match: '',
+        peakEnabled: false,
+        peak: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+        offPeak: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      },
     } as unknown as UsageInsightsReport
   }
 
@@ -176,22 +173,30 @@ describe('the rate editor', () => {
   }
 
   it('states an empty window instead of vanishing from the panel', () => {
-    const markup = renderToStaticMarkup(createElement(RateEditor, { ...base, routes: [] }))
+    const markup = renderToStaticMarkup(createElement(RateEditor, { ...base, models: [] }))
 
-    expect(markup).toContain('pricingEditorTitle')
+    expect(markup).toContain('pricingModelsTitle')
     expect(markup).toContain('pricingEditorEmpty')
   })
 
-  it('offers a row per route once the window recorded some', () => {
+  it('offers a card per model, with both of its price sets', () => {
+    const card = (match: string): UsageModelPrice => ({
+      match,
+      peakEnabled: true,
+      offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+      peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+    })
     const markup = renderToStaticMarkup(createElement(RateEditor, {
       ...base,
-      routes: [route('p/m'), route('q/m')],
+      models: [card('p/m'), card('q/m')],
     }))
 
-    expect(markup).toContain('pricingEditorHint')
+    expect(markup).toContain('pricingModelsHint')
     expect(markup).not.toContain('pricingEditorEmpty')
     expect(markup).toContain('p/m')
     expect(markup).toContain('q/m')
+    // The peak set is stated for a model that prices it.
+    expect(markup).toContain('pricingPeakPrices')
   })
 })
 
@@ -204,21 +209,29 @@ describe('the rate editor', () => {
   }
 
   it('states an empty window instead of vanishing from the panel', () => {
-    const markup = renderToStaticMarkup(createElement(RateEditor, { ...base, routes: [] }))
+    const markup = renderToStaticMarkup(createElement(RateEditor, { ...base, models: [] }))
 
-    expect(markup).toContain('pricingEditorTitle')
+    expect(markup).toContain('pricingModelsTitle')
     expect(markup).toContain('pricingEditorEmpty')
   })
 
-  it('offers a row per route once the window recorded some', () => {
+  it('offers a card per model, with both of its price sets', () => {
+    const card = (match: string): UsageModelPrice => ({
+      match,
+      peakEnabled: true,
+      offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+      peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+    })
     const markup = renderToStaticMarkup(createElement(RateEditor, {
       ...base,
-      routes: [route('p/m'), route('q/m')],
+      models: [card('p/m'), card('q/m')],
     }))
 
-    expect(markup).toContain('pricingEditorHint')
+    expect(markup).toContain('pricingModelsHint')
     expect(markup).not.toContain('pricingEditorEmpty')
     expect(markup).toContain('p/m')
     expect(markup).toContain('q/m')
+    // The peak set is stated for a model that prices it.
+    expect(markup).toContain('pricingPeakPrices')
   })
 })

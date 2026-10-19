@@ -12,12 +12,20 @@ const NEXT_DAY = OFF_PEAK + 86_400_000
 
 const OPTIONS: PricingOptions = {
   currency: 'CNY',
-  rules: [{ match: 'flash', input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 }],
-  fallback: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
-  overrides: new Map(),
+  models: [{
+    match: 'flash',
+    peakEnabled: true,
+    offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+    peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+  }],
+  fallback: {
+    match: '',
+    peakEnabled: true,
+    offPeak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+    peak: { input: 4, cacheRead: 0.08, cacheWrite: 4, output: 16 },
+  },
   peakWindows: [{ start: 9 * 60, end: 12 * 60 }],
   peakWeekdaysOnly: true,
-  peakMultiplier: 2,
 }
 
 const META: ReportMeta = {
@@ -62,7 +70,6 @@ describe('buildReport', () => {
     expect(report.totals.sessions).toBe(2)
     expect(report.totals.cost).toBeCloseTo(3, 10)
     expect(report.currency).toBe('CNY')
-    expect(report.peakMultiplier).toBe(2)
   })
 
   it('prices a peak sample at the configured multiple', () => {
@@ -159,10 +166,17 @@ describe('buildReport', () => {
   it('carries the effective rate card and peak schedule onto the report', () => {
     const report = buildReport([], OPTIONS, META)
 
-    expect(report.prices).toEqual([
-      { match: 'flash', input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
-    ])
-    expect(report.fallbackPrice).toEqual({ match: '', input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 })
+    expect(report.prices).toEqual([{
+      match: 'flash',
+      peakEnabled: true,
+      offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+      peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+    }])
+    expect(report.fallbackPrice).toMatchObject({
+      match: '',
+      peakEnabled: true,
+      offPeak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+    })
     expect(report.peakWindows).toEqual(['09:00-12:00'])
     expect(report.peakWeekdaysOnly).toBe(true)
   })
@@ -271,9 +285,15 @@ describe('project rows', () => {
 
 describe('route rates', () => {
   /** The same options with one route overridden, and one rule genuinely matched. */
+  /** A card written for one model, placed ahead of the general one. */
   const OVERRIDDEN: PricingOptions = {
     ...OPTIONS,
-    overrides: new Map([['agg/glm-5.3-flash', { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 }]]),
+    models: [{
+      match: 'glm-5.3',
+      peakEnabled: false,
+      offPeak: { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 },
+      peak: { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 9 },
+    }, ...OPTIONS.models],
   }
 
   it('publishes the source of every rate in effect', () => {
@@ -287,13 +307,17 @@ describe('route rates', () => {
 
     const byRoute = new Map(report.routeRates.map(row => [row.route, row]))
     expect(byRoute.get('x/flash')).toMatchObject({
-      source: 'rule',
-      rule: 'flash',
-      rate: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+      source: 'model',
+      model: 'flash',
+      peakEnabled: true,
+      offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+      peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
     })
-    expect(byRoute.get('agg/glm-5.3-flash')).toMatchObject({ source: 'override', rate: { output: 9 } })
+    // The more specific card comes first in configuration order, so it claims
+    // this route even though the general one would also match it.
+    expect(byRoute.get('agg/glm-5.3-flash')).toMatchObject({ source: 'model', model: 'glm-5.3' })
+    expect(byRoute.get('agg/glm-5.3-flash')?.offPeak.output).toBe(9)
     expect(byRoute.get('input/gpt-5.6-sol')).toMatchObject({ source: 'fallback' })
-    expect(byRoute.get('agg/glm-5.3-flash')?.rule).toBeUndefined()
   })
 
   it('publishes the off-peak rate even when every sample of the route was peak', () => {
@@ -301,13 +325,14 @@ describe('route rates', () => {
       session('a', [[PEAK, 'x/flash', tokens(1_000_000)]]),
     ], OPTIONS, META)
 
-    // The sample was priced at 2x, and the table still states the base rate the
-    // editor edits and the multiplier is applied to.
+    // The sample was priced at the peak set, and the row still states both sets:
+    // one number could not say what the route is billed at across a day.
     expect(report.totals.cost).toBeCloseTo(2, 10)
-    expect(report.routeRates[0]?.rate).toEqual({ input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 })
+    expect(report.routeRates[0]?.offPeak).toEqual({ input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 })
+    expect(report.routeRates[0]?.peak).toEqual({ input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 })
   })
 
-  it('bills an overridden route at its override, not at the rule that would claim it', () => {
+  it('bills a route at the more specific card that claims it', () => {
     const report = buildReport([
       session('a', [[OFF_PEAK, 'agg/glm-5.3-flash', tokens(1_000_000)]]),
     ], OVERRIDDEN, META)

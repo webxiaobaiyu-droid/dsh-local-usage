@@ -1,39 +1,55 @@
 /**
- * Editing the per-route rate table.
+ * Editing the model price cards.
  *
- * The editor holds four text fields per route, not four numbers: a reader
- * clearing a field to fall back to the configured rule is a real intention, and
- * a number input cannot tell "empty" from "zero". The drafts are therefore
- * strings until the moment they become an update, and this module owns that
- * translation — which routes actually changed, which were cleared, and which
- * hold something that is not a price.
+ * The editor holds text fields, not numbers: a reader clearing one to fall back
+ * to the value in effect is a real intention, and a number input cannot tell
+ * "empty" from "zero". The drafts are therefore strings until the moment they
+ * become an update, and this module owns that translation — which cards actually
+ * changed, which fields hold something that is not a price, and which set of
+ * prices a field belongs to.
+ *
+ * A card is a model, not a route: editing one changes every route that model is
+ * sold under, which is the point of pricing by model. Consumption stays per route
+ * and is not edited here at all.
  *
  * @module dsh-local-usage/client/rate-draft
  */
-import type { UsagePricingUpdate, UsageRouteRate } from '../types.ts';
-/** The four fields of one route's row, as typed. */
-export interface RateDraft {
+import type { UsageModelPrice, UsagePricingUpdate } from '../types.ts';
+/** One set of four price fields, as typed. */
+export interface PriceFields {
     input: string;
     cacheRead: string;
     cacheWrite: string;
     output: string;
 }
-/** Every row's draft, keyed by exact route. */
-export type RateDrafts = Record<string, RateDraft>;
+/** One model's draft: the switch and both sets of prices. */
+export interface ModelDraft {
+    /** Whether the model prices peak separately. */
+    peakEnabled: boolean;
+    /** Prices inside a peak window; ignored while {@link peakEnabled} is false. */
+    peak: PriceFields;
+    /** Prices outside one, or the flat price when {@link peakEnabled} is false. */
+    offPeak: PriceFields;
+}
+/** Every model's draft, keyed by the card's `match`. */
+export type ModelDrafts = Record<string, ModelDraft>;
 /** The four buckets, in the order the editor writes them. */
 export declare const RATE_FIELDS: readonly ["input", "cacheRead", "cacheWrite", "output"];
-/** One field of one route's row. */
+/** One bucket of one card. */
 export type RateField = typeof RATE_FIELDS[number];
+/** Which of a card's two sets of prices a field belongs to. */
+export type PriceSet = 'peak' | 'offPeak';
 /** What one set of drafts amounts to. */
 export type RateDraftResult = 
-/** Nothing to write: every row already matches the rate in effect. */
+/** Nothing to write: every card already matches the prices in effect. */
 {
     readonly status: 'empty';
 }
-/** A row holds text that is not a price; `route` and `field` name it. */
+/** A field holds text that is not a price; names the card, the set and the field. */
  | {
     readonly status: 'invalid';
-    readonly route: string;
+    readonly model: string;
+    readonly set: PriceSet;
     readonly field: RateField;
 }
 /** A write to send. */
@@ -42,21 +58,23 @@ export type RateDraftResult =
     readonly update: UsagePricingUpdate;
 };
 /**
- * The drafts an editor opens on: every route, pre-filled with the rate in effect.
- * @param routes - the routes the window recorded, with their rates.
- * @returns one draft per route.
+ * The drafts an editor opens on: one per card, pre-filled with what is in effect.
+ * @param models - the cards the report published, in match order.
+ * @returns one draft per card, keyed by `match`.
  */
-export declare function draftsFrom(routes: readonly UsageRouteRate[]): RateDrafts;
+export declare function draftsFrom(models: readonly UsageModelPrice[]): ModelDrafts;
 /**
  * Turn one set of drafts into the write it implies.
  *
- * A row is written only when it differs from what is in effect: a route priced
- * by a rule and left untouched stays on that rule, so the table never fills with
- * overrides that merely restate the configuration. Clearing every field of an
- * overridden row asks for the override to be removed.
+ * A card is written only when it differs from what is in effect, so the table
+ * never fills with edits that merely restate the configuration. Blank fields are
+ * completed from the value in effect rather than rejected — a reader editing only
+ * the output price means the other three as they stand — and a card whose fields
+ * are all blank asks for the reader's edit to be dropped, returning the model to
+ * its configured prices.
  *
  * @param drafts - the fields as typed.
- * @param routes - the routes and the rates currently in effect.
+ * @param models - the cards and the prices currently in effect.
  * @returns nothing to do, the first invalid field, or the update to send.
  */
-export declare function pendingUpdate(drafts: RateDrafts, routes: readonly UsageRouteRate[]): RateDraftResult;
+export declare function pendingUpdate(drafts: ModelDrafts, models: readonly UsageModelPrice[]): RateDraftResult;

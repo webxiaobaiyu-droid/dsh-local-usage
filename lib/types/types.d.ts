@@ -84,12 +84,24 @@ export interface UsageSessionRow extends UsageCosted {
     /** Latest usage sample time in Unix epoch milliseconds, or `createdAt` when the session recorded none. */
     readonly updatedAt: number;
 }
-/** One configured rate card, in currency units per one million tokens. */
-export interface UsagePriceRow extends UsageRate {
+/**
+ * One model's prices, in currency units per one million tokens.
+ *
+ * A card belongs to a model rather than to a route: one model is sold through
+ * several vendor routes, they cost the same, and one card prices all of them.
+ * Consumption stays per route — see {@link UsageRouteRate}.
+ */
+export interface UsageModelPrice {
     /** Case-insensitive substring matched against `provider/model`; empty for the fallback card. */
     readonly match: string;
+    /** Whether {@link peak} applies inside the configured windows. */
+    readonly peakEnabled: boolean;
+    /** Prices for a settlement inside a peak window. */
+    readonly peak: UsageRate;
+    /** Prices outside one; the only prices of a flat-priced model. */
+    readonly offPeak: UsageRate;
 }
-/** The four bucket prices of one rate card, without the rule that supplied them. */
+/** The four bucket prices of one card, without the model that supplied them. */
 export interface UsageRate {
     /** Cache-miss prompt tokens. */
     readonly input: number;
@@ -100,37 +112,55 @@ export interface UsageRate {
     /** Generated tokens. */
     readonly output: number;
 }
-/** Where one route's effective rate came from. */
-export type UsageRateSource = 'override' | 'rule' | 'fallback';
+/** Where one route's prices came from. */
+export type UsageRateSource = 'model' | 'fallback';
 /**
- * One route the window recorded, with the off-peak rate it was priced at.
+ * One route the window recorded, with the prices its model states.
  *
- * Published so the panel can show which card actually claimed each route — a
- * substring rule quietly pricing a route it was never written for is the failure
- * mode this surface exists to make visible — and so the rate editor opens on the
- * values in effect rather than on a guess.
+ * Published so the panel can show which model actually claimed each route — a
+ * substring card quietly pricing a route it was never written for is the failure
+ * mode this surface exists to make visible — and so the per-route consumption
+ * table can sit beside the per-model prices without either being folded into the
+ * other. Both halves of the day are stated: a route's settlements can fall on
+ * both, and a single "effective rate" would be a number no sample was billed at.
  */
 export interface UsageRouteRate {
     /** `provider/model` exactly as the log recorded it. */
     readonly route: string;
-    /** Off-peak rate; the peak multiplier is applied per sample on top of this. */
-    readonly rate: UsageRate;
-    /** Which of the three sources supplied {@link rate}. */
+    /** The model card that claimed it, absent when the fallback paid. */
+    readonly model?: string;
+    /** Whether that card prices peak separately. */
+    readonly peakEnabled: boolean;
+    /** Prices inside a peak window. */
+    readonly peak: UsageRate;
+    /** Prices outside one; the flat price when {@link peakEnabled} is false. */
+    readonly offPeak: UsageRate;
+    /** Which of the two sources supplied the prices. */
     readonly source: UsageRateSource;
-    /** The matched rule's `match` string, present only when `source` is `rule`. */
-    readonly rule?: string;
     /** Tokens this route was billed for in the window; the table is ordered by it. */
     readonly tokens: number;
 }
-/** One write to the per-route rate overrides. */
+/** A reader's edit to one model card. */
+export interface UsageModelEdit {
+    /** Whether the model prices peak separately. */
+    readonly peakEnabled: boolean;
+    /** Prices inside a peak window. */
+    readonly peak: UsageRate;
+    /** Prices outside one, or the flat price when peak pricing is off. */
+    readonly offPeak: UsageRate;
+}
+/** One write to the model prices. */
 export interface UsagePricingUpdate {
-    /** Routes to write; a `null` rate clears the override and returns the route to its rule. */
-    readonly set: Record<string, UsageRate | null>;
+    /**
+     * Cards to write, keyed by their `match`; `null` clears the edit and returns the
+     * model to its configured prices.
+     */
+    readonly models: Record<string, UsageModelEdit | null>;
 }
 /** What a pricing write answers with. */
 export interface UsagePricingResult {
-    /** Every override in effect after the write, keyed by route. */
-    readonly overrides: Record<string, UsageRate>;
+    /** Every edit in effect after the write, keyed by model `match`. */
+    readonly models: Record<string, UsageModelEdit>;
 }
 /** One request to assemble a report. */
 export interface UsageInsightsRequest {
@@ -277,11 +307,10 @@ export interface UsageInsightsReport {
      */
     readonly cached: boolean;
     /** Factor the configured rate card applies inside a peak window; `1` disables peak pricing. */
-    readonly peakMultiplier: number;
     /** Rate cards matched against the routed model, in match order. */
-    readonly prices: readonly UsagePriceRow[];
+    readonly prices: readonly UsageModelPrice[];
     /** Rate applied to a route no card matches. */
-    readonly fallbackPrice: UsagePriceRow;
+    readonly fallbackPrice: UsageModelPrice;
     /**
      * Every route the window recorded, with the rate it was priced at.
      *

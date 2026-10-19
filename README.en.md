@@ -123,7 +123,7 @@ It reads as an explanation of the figures above rather than a report of its own:
 | `fallback` | the Flash card | Rate applied to a route no card matches. |
 | `peakWindows` | `09:00-12:00`, `14:00-18:00` | Peak windows in Beijing time; empty disables peak pricing. |
 | `peakWeekdaysOnly` | `true` | Whether weekends are always billed off-peak. |
-| `peakMultiplier` | `2` | Multiplier applied to every rate inside a peak window. |
+| ``peak` 块（每个模型的高峰价）` | `2` | Multiplier applied to every rate inside a peak window. |
 | `warmup` | `true` | Fold the whole corpus in the background at activation, so the first open of the panel is a re-price. |
 | `warmupDelayMs` | `4000` | How long after activation that background fold starts, in milliseconds. |
 

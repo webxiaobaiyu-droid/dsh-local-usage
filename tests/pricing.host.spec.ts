@@ -6,7 +6,7 @@ import {
   parsePeakWindow,
   selectRate,
 } from '../src/pricing.ts'
-import type { PriceRate, PriceRule } from '../src/pricing.ts'
+import type { ModelPrice } from '../src/pricing.ts'
 
 /** 2026-09-21 is a Monday; 02:00 UTC is 10:00 in Beijing, inside the first peak window. */
 const MONDAY_PEAK = Date.UTC(2026, 8, 21, 2, 0, 0)
@@ -22,10 +22,32 @@ const WINDOWS = [
   { start: 14 * 60, end: 18 * 60 },
 ]
 
-const FALLBACK: PriceRate = { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 }
-const RULES: readonly PriceRule[] = [
-  { match: 'v4-pro', input: 4.5, cacheRead: 0.15, cacheWrite: 4.5, output: 13.5 },
-  { match: 'flash', input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+const FALLBACK: ModelPrice = {
+  match: '',
+  peakEnabled: true,
+  offPeak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+  peak: { input: 4, cacheRead: 0.08, cacheWrite: 4, output: 16 },
+}
+/** Two model cards, the peak set doubled — a model may state any peak price it likes. */
+const CARDS: readonly ModelPrice[] = [
+  {
+    match: 'v4-pro',
+    peakEnabled: true,
+    offPeak: { input: 4.5, cacheRead: 0.15, cacheWrite: 4.5, output: 13.5 },
+    peak: { input: 9, cacheRead: 0.3, cacheWrite: 9, output: 27 },
+  },
+  {
+    match: 'flash',
+    peakEnabled: true,
+    offPeak: { input: 1, cacheRead: 0.02, cacheWrite: 1, output: 4 },
+    peak: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+  },
+  {
+    match: 'flat-model',
+    peakEnabled: false,
+    offPeak: { input: 3, cacheRead: 0.1, cacheWrite: 3, output: 9 },
+    peak: { input: 3, cacheRead: 0.1, cacheWrite: 3, output: 9 },
+  },
 ]
 
 describe('parsePeakWindow', () => {
@@ -77,32 +99,61 @@ describe('isPeakTime', () => {
 })
 
 describe('selectRate', () => {
-  it('prefers the first matching rule', () => {
-    const selected = selectRate(RULES, FALLBACK, 'commoncode/deepseek-v4-pro', false, 2)
+  it('prices a route with the first model that claims it', () => {
+    const selected = selectRate(CARDS, FALLBACK, 'commoncode/deepseek-v4-pro', false)
     expect(selected).toEqual({
       rate: { input: 4.5, cacheRead: 0.15, cacheWrite: 4.5, output: 13.5 },
       matched: true,
-      source: 'rule',
-      rule: 'v4-pro',
+      source: 'model',
+      model: 'v4-pro',
+      peakApplied: false,
     })
   })
 
+  it('claims a vendor route by the model inside it', () => {
+    // One card prices every route that carries the model's name, whatever sits
+    // in front of it: this is what makes a vendor-prefixed route free to price.
+    expect(selectRate(CARDS, FALLBACK, 'workbuddy/cn:deepseek-v4.1-flash', false).model).toBe('flash')
+    expect(selectRate(CARDS, FALLBACK, 'vendor-a/deepseek-v4.1-flash', false).model).toBe('flash')
+  })
+
   it('matches case-insensitively on the route', () => {
-    expect(selectRate(RULES, FALLBACK, 'COMMONCODE/DeepSeek-V4.1-FLASH', false, 2).rate.input).toBe(1)
+    expect(selectRate(CARDS, FALLBACK, 'COMMONCODE/DeepSeek-V4.1-FLASH', false).rate.input).toBe(1)
   })
 
-  it('falls back when no rule claims the route', () => {
-    expect(selectRate(RULES, FALLBACK, 'other/gpt', false, 2))
-      .toEqual({ rate: FALLBACK, matched: false, source: 'fallback' })
+  it('falls back when no model claims the route', () => {
+    expect(selectRate(CARDS, FALLBACK, 'other/gpt', false))
+      .toEqual({
+        rate: { input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 },
+        matched: false,
+        source: 'fallback',
+        peakApplied: false,
+      })
   })
 
-  it('scales every bucket by the peak multiplier', () => {
-    expect(selectRate(RULES, FALLBACK, 'x/flash', true, 2).rate)
+  it('uses the card’s own peak prices inside a window', () => {
+    // Stated, not derived: this card's peak set is twice its off-peak set, but
+    // nothing in the engine assumes that ratio.
+    expect(selectRate(CARDS, FALLBACK, 'x/flash', true).rate)
       .toEqual({ input: 2, cacheRead: 0.04, cacheWrite: 2, output: 8 })
+    expect(selectRate(CARDS, FALLBACK, 'x/flash', true).peakApplied).toBe(true)
   })
 
-  it('leaves the rate alone when peak pricing is disabled', () => {
-    expect(selectRate(RULES, FALLBACK, 'x/flash', true, 1).rate.input).toBe(1)
+  it('keeps a flat-priced model on one price all day', () => {
+    const peak = selectRate(CARDS, FALLBACK, 'x/flat-model', true)
+    const offPeak = selectRate(CARDS, FALLBACK, 'x/flat-model', false)
+    expect(peak.rate).toEqual(offPeak.rate)
+    expect(peak.peakApplied).toBe(false)
+  })
+
+  it('honours a peak set that is not double the off-peak set', () => {
+    const odd: ModelPrice = {
+      match: 'odd-model',
+      peakEnabled: true,
+      offPeak: { input: 1, cacheRead: 0.1, cacheWrite: 1, output: 2 },
+      peak: { input: 1.5, cacheRead: 0.12, cacheWrite: 1.5, output: 2.5 },
+    }
+    expect(selectRate([odd], FALLBACK, 'x/odd-model', true).rate).toEqual(odd.peak)
   })
 })
 
@@ -122,6 +173,6 @@ describe('costOf', () => {
       outputTokens: 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-    }, FALLBACK)).toBe(0)
+    }, FALLBACK.offPeak)).toBe(0)
   })
 })
