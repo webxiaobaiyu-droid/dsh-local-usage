@@ -347,6 +347,88 @@ export const styles = String.raw`
   font-weight: 400;
 }
 
+/* The price cards, one per model.
+
+ * A card is a block rather than a table row: it states two sets of four prices
+ * and a switch, which is nine controls, and nine columns of a table would be
+ * unreadable at the width this popover has. Stacked, each card reads as one
+ * model's price sheet. */
+.dlu-editorCards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dlu-editorCard {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 10px 12px 11px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+}
+
+.dlu-editorCardName {
+  padding: 0 5px;
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.dlu-editorCardRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dlu-editorToggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.dlu-editorToggle input {
+  inline-size: 13px;
+  block-size: 13px;
+  margin: 0;
+  accent-color: var(--dsw-alias-link);
+}
+
+/* Each set of four prices: the label states which half of the day the numbers
+ * are for, and the four fields line up across cards so they can be compared
+ * down the block. */
+.dlu-editorPriceRow {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.dlu-editorPriceLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dlu-editorPriceFields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dlu-editorPriceField {
+  display: flex;
+  min-inline-size: 0;
+}
+
+.dlu-editorPriceField .dlu-editorField {
+  inline-size: 100%;
+}
+
 /* ── The range's wave ─────────────────────────────────────────────────── */
 
 /* The range's own shape, under the calendar: the calendar answers a year, this

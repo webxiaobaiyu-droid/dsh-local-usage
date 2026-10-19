@@ -1,41 +1,63 @@
 /**
- * Editing the per-route rate table.
+ * Editing the model price cards.
  *
- * The editor holds four text fields per route, not four numbers: a reader
- * clearing a field to fall back to the configured rule is a real intention, and
- * a number input cannot tell "empty" from "zero". The drafts are therefore
- * strings until the moment they become an update, and this module owns that
- * translation — which routes actually changed, which were cleared, and which
- * hold something that is not a price.
+ * The editor holds text fields, not numbers: a reader clearing one to fall back
+ * to the value in effect is a real intention, and a number input cannot tell
+ * "empty" from "zero". The drafts are therefore strings until the moment they
+ * become an update, and this module owns that translation — which cards actually
+ * changed, which fields hold something that is not a price, and which set of
+ * prices a field belongs to.
+ *
+ * A card is a model, not a route: editing one changes every route that model is
+ * sold under, which is the point of pricing by model. Consumption stays per route
+ * and is not edited here at all.
  *
  * @module dsh-local-usage/client/rate-draft
  */
 
-import type { UsagePricingUpdate, UsageRate, UsageRouteRate } from '../types.ts'
+import type { UsageModelEdit, UsageModelPrice, UsagePricingUpdate, UsageRate } from '../types.ts'
 
-/** The four fields of one route's row, as typed. */
-export interface RateDraft {
+/** One set of four price fields, as typed. */
+export interface PriceFields {
   input: string
   cacheRead: string
   cacheWrite: string
   output: string
 }
 
-/** Every row's draft, keyed by exact route. */
-export type RateDrafts = Record<string, RateDraft>
+/** One model's draft: the switch and both sets of prices. */
+export interface ModelDraft {
+  /** Whether the model prices peak separately. */
+  peakEnabled: boolean
+  /** Prices inside a peak window; ignored while {@link peakEnabled} is false. */
+  peak: PriceFields
+  /** Prices outside one, or the flat price when {@link peakEnabled} is false. */
+  offPeak: PriceFields
+}
+
+/** Every model's draft, keyed by the card's `match`. */
+export type ModelDrafts = Record<string, ModelDraft>
 
 /** The four buckets, in the order the editor writes them. */
 export const RATE_FIELDS = ['input', 'cacheRead', 'cacheWrite', 'output'] as const
 
-/** One field of one route's row. */
+/** One bucket of one card. */
 export type RateField = typeof RATE_FIELDS[number]
+
+/** Which of a card's two sets of prices a field belongs to. */
+export type PriceSet = 'peak' | 'offPeak'
 
 /** What one set of drafts amounts to. */
 export type RateDraftResult =
-  /** Nothing to write: every row already matches the rate in effect. */
+  /** Nothing to write: every card already matches the prices in effect. */
   | { readonly status: 'empty' }
-  /** A row holds text that is not a price; `route` and `field` name it. */
-  | { readonly status: 'invalid'; readonly route: string; readonly field: RateField }
+  /** A field holds text that is not a price; names the card, the set and the field. */
+  | {
+    readonly status: 'invalid'
+    readonly model: string
+    readonly set: PriceSet
+    readonly field: RateField
+  }
   /** A write to send. */
   | { readonly status: 'ready'; readonly update: UsagePricingUpdate }
 
@@ -44,89 +66,131 @@ function draftOf(value: number): string {
   return Number.isFinite(value) ? String(value) : ''
 }
 
+/** The four fields of one set, as the editor shows them. */
+function fieldsOf(rate: UsageRate): PriceFields {
+  return {
+    input: draftOf(rate.input),
+    cacheRead: draftOf(rate.cacheRead),
+    cacheWrite: draftOf(rate.cacheWrite),
+    output: draftOf(rate.output),
+  }
+}
+
 /**
- * The drafts an editor opens on: every route, pre-filled with the rate in effect.
- * @param routes - the routes the window recorded, with their rates.
- * @returns one draft per route.
+ * The drafts an editor opens on: one per card, pre-filled with what is in effect.
+ * @param models - the cards the report published, in match order.
+ * @returns one draft per card, keyed by `match`.
  */
-export function draftsFrom(routes: readonly UsageRouteRate[]): RateDrafts {
-  const drafts: RateDrafts = {}
-  for (const entry of routes) {
-    drafts[entry.route] = {
-      input: draftOf(entry.rate.input),
-      cacheRead: draftOf(entry.rate.cacheRead),
-      cacheWrite: draftOf(entry.rate.cacheWrite),
-      output: draftOf(entry.rate.output),
+export function draftsFrom(models: readonly UsageModelPrice[]): ModelDrafts {
+  const drafts: ModelDrafts = {}
+  for (const card of models) {
+    drafts[card.match] = {
+      peakEnabled: card.peakEnabled,
+      peak: fieldsOf(card.peak),
+      offPeak: fieldsOf(card.offPeak),
     }
   }
   return drafts
 }
 
-/** Parse one draft field. */
-function readField(draft: RateDraft, field: RateField): number | undefined | null {
-  const text = draft[field].trim()
-  // Empty means "no override here", which is not the same as zero.
-  if (text.length === 0) return undefined
-  const value = Number(text)
+/** Parse one field: `undefined` for blank, `null` for text that is not a price. */
+function readField(text: string): number | undefined | null {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return undefined
+  const value = Number(trimmed)
   return Number.isFinite(value) && value >= 0 ? value : null
 }
 
-/** Whether every field of a row is blank. */
-function isEmptyRow(draft: RateDraft): boolean {
-  return RATE_FIELDS.every(field => draft[field].trim().length === 0)
+/** Whether every field of one set is blank. */
+function isBlank(fields: PriceFields): boolean {
+  return RATE_FIELDS.every(field => fields[field].trim().length === 0)
+}
+
+/** Whether two sets state the same four prices. */
+function samePrices(left: UsageRate, right: UsageRate): boolean {
+  return RATE_FIELDS.every(field => left[field] === right[field])
 }
 
 /**
  * Turn one set of drafts into the write it implies.
  *
- * A row is written only when it differs from what is in effect: a route priced
- * by a rule and left untouched stays on that rule, so the table never fills with
- * overrides that merely restate the configuration. Clearing every field of an
- * overridden row asks for the override to be removed.
+ * A card is written only when it differs from what is in effect, so the table
+ * never fills with edits that merely restate the configuration. Blank fields are
+ * completed from the value in effect rather than rejected — a reader editing only
+ * the output price means the other three as they stand — and a card whose fields
+ * are all blank asks for the reader's edit to be dropped, returning the model to
+ * its configured prices.
  *
  * @param drafts - the fields as typed.
- * @param routes - the routes and the rates currently in effect.
+ * @param models - the cards and the prices currently in effect.
  * @returns nothing to do, the first invalid field, or the update to send.
  */
 export function pendingUpdate(
-  drafts: RateDrafts,
-  routes: readonly UsageRouteRate[],
+  drafts: ModelDrafts,
+  models: readonly UsageModelPrice[],
 ): RateDraftResult {
-  const set: Record<string, UsageRate | null> = {}
+  const writes: Record<string, UsageModelEdit | null> = {}
 
-  for (const entry of routes) {
-    const draft = drafts[entry.route]
+  for (const card of models) {
+    const draft = drafts[card.match]
     if (draft === undefined) continue
 
-    if (isEmptyRow(draft)) {
-      // A blank row on an override is a request to drop it; a blank row on a
-      // rule or the fallback asks for nothing, because there is nothing to drop.
-      if (entry.source === 'override') set[entry.route] = null
+    // A card blanked on both sets asks for the edit to be dropped. With the
+    // switch off, the peak set is not read at all, so only the flat set counts.
+    const blankBoth = isBlank(draft.offPeak) && isBlank(draft.peak)
+    if (blankBoth) {
+      writes[card.match] = null
       continue
     }
 
-    const parsed: Record<RateField, number | undefined> = {
-      input: undefined, cacheRead: undefined, cacheWrite: undefined, output: undefined,
+    const offPeak = resolve(draft.offPeak, card.offPeak)
+    if ('field' in offPeak) {
+      return { status: 'invalid', model: card.match, set: 'offPeak', field: offPeak.field }
     }
-    for (const field of RATE_FIELDS) {
-      const value = readField(draft, field)
-      if (value === null) return { status: 'invalid', route: entry.route, field }
-      // A partially filled row is completed from the rate in effect rather than
-      // rejected: the reader editing only the output price means the rest as-is.
-      parsed[field] = value ?? entry.rate[field]
+    // The peak set only matters while the switch is on; a flat model keeps
+    // whatever peak prices it carries rather than validating fields it ignores.
+    let peak: UsageRate = card.peak
+    if (draft.peakEnabled) {
+      const read = resolve(draft.peak, card.peak)
+      if ('field' in read) {
+        return { status: 'invalid', model: card.match, set: 'peak', field: read.field }
+      }
+      peak = read.rate
     }
 
-    const rate: UsageRate = {
-      input: parsed.input as number,
-      cacheRead: parsed.cacheRead as number,
-      cacheWrite: parsed.cacheWrite as number,
-      output: parsed.output as number,
+    const next: UsageModelEdit = {
+      peakEnabled: draft.peakEnabled,
+      peak,
+      offPeak: offPeak.rate,
     }
-    // Only a difference is worth persisting: a row left alone keeps its rule, so
-    // the table never fills with overrides that merely restate the configuration.
-    const unchanged = RATE_FIELDS.every(field => rate[field] === entry.rate[field])
-    if (!unchanged) set[entry.route] = rate
+    const unchanged = next.peakEnabled === card.peakEnabled
+      && samePrices(next.offPeak, card.offPeak)
+      && samePrices(next.peak, card.peak)
+    if (!unchanged) writes[card.match] = next
   }
 
-  return Object.keys(set).length === 0 ? { status: 'empty' } : { status: 'ready', update: { set } }
+  return Object.keys(writes).length === 0
+    ? { status: 'empty' }
+    : { status: 'ready', update: { models: writes } }
+}
+
+/**
+ * Read one set of fields, completing blanks from the prices in effect.
+ * @param fields - the four fields as typed.
+ * @param effective - the prices those fields stand for when left blank.
+ * @returns either the four prices or the first field that is not one.
+ */
+function resolve(fields: PriceFields, effective: UsageRate): { rate: UsageRate } | { field: RateField } {
+  const rate: Record<RateField, number> = {
+    input: effective.input,
+    cacheRead: effective.cacheRead,
+    cacheWrite: effective.cacheWrite,
+    output: effective.output,
+  }
+  for (const field of RATE_FIELDS) {
+    const value = readField(fields[field])
+    if (value === null) return { field }
+    if (value !== undefined) rate[field] = value
+  }
+  return { rate }
 }

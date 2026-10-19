@@ -32,9 +32,9 @@ import { parsePeakWindow } from './pricing.ts'
 import type { ModelPrice, PeakWindow, PriceRate } from './pricing.ts'
 import { createProgressTracker } from './progress.ts'
 import type { ProgressTracker } from './progress.ts'
-import { createRateStore, pricingFilePath, readRate, resolveDshHome } from './rates.ts'
+import { createRateStore, pricingFilePath, readModelEdit, resolveDshHome } from './rates.ts'
 import type { RateStore } from './rates.ts'
-import type { UsageInsightsReport, UsagePricingUpdate, UsageRate } from './types.ts'
+import type { UsageInsightsReport, UsageModelEdit, UsagePricingUpdate } from './types.ts'
 
 export type * from './types.ts'
 
@@ -689,20 +689,19 @@ async function handleReport(
  */
 function parsePricingUpdate(value: unknown): UsagePricingUpdate | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const set = (value as { set?: unknown }).set
-  if (typeof set !== 'object' || set === null) return undefined
-  const parsed: Record<string, UsageRate | null> = {}
-  for (const [route, candidate] of Object.entries(set as Record<string, unknown>)) {
-    if (route.length === 0) return undefined
+  const models = (value as { models?: unknown }).models
+  if (typeof models !== 'object' || models === null) return undefined
+  const parsed: Record<string, UsageModelEdit | null> = {}
+  for (const [match, candidate] of Object.entries(models as Record<string, unknown>)) {
     if (candidate === null) {
-      parsed[route] = null
+      parsed[match] = null
       continue
     }
-    const rate = readRate(candidate)
-    if (rate === undefined) return undefined
-    parsed[route] = rate
+    const edit = readModelEdit(candidate)
+    if (edit === undefined) return undefined
+    parsed[match] = edit
   }
-  return { set: parsed }
+  return { models: parsed }
 }
 
 /** Answer one rate-table write with the table now in effect. */

@@ -553,7 +553,6 @@ export function UsagePanel({ panelId, locale, report, saveRates, t, usePanelInfo
                     {yearReport === undefined ? null : (
                       <PricingNotes
                         report={yearReport}
-                        locale={activeLocale}
                         t={t}
                         formatTokens={tokens}
                         onSaveRates={saveRateTable}

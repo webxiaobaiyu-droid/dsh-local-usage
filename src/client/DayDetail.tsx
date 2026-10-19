@@ -110,9 +110,9 @@ export function DayDetail({
               <span className={css.heroValue} data-room={figureRoom(formatCost(report.totals.cost))}>
                 {formatCost(report.totals.cost)}
               </span>
-              {report.peakMultiplier <= 1
-                ? null
-                : <span className={css.heroDetail}>{t('peakNote', { multiplier: String(report.peakMultiplier) })}</span>}
+              {report.prices.some(card => card.peakEnabled) || report.fallbackPrice.peakEnabled
+                ? <span className={css.heroDetail}>{t('peakNoteSeparate')}</span>
+                : null}
             </div>
           )}
       </header>
