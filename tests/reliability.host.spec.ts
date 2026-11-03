@@ -136,7 +136,7 @@ describe('buildReport reliability', () => {
     const report = buildReport(
       [input('a', left), input('b', right)],
       PRICING,
-      { generatedAt: DAY_ONE, unreadableSessions: 0, cached: false },
+      { generatedAt: DAY_ONE, unreadableSessions: 0, restoredSessions: 0, cached: false },
     )
 
     expect(report.reliability.retries).toBe(4)
@@ -153,7 +153,7 @@ describe('buildReport reliability', () => {
     const report = buildReport(
       [{ sessionId: 'a', createdAt: DAY_ONE, samples: [] }],
       PRICING,
-      { generatedAt: DAY_ONE, unreadableSessions: 0, cached: false },
+      { generatedAt: DAY_ONE, unreadableSessions: 0, restoredSessions: 0, cached: false },
     )
     expect(report.reliability).toMatchObject({ retries: 0, toolCalls: 0, toolErrors: 0, compactionFailures: 0 })
     expect(report.reliability.retryCauses).toEqual([])

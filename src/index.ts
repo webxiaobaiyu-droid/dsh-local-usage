@@ -73,7 +73,10 @@ export function apply(ctx: Context, config: UsageInsightsConfig = DEFAULT_CONFIG
   const rates = createRateStore(pricingFilePath(resolveDshHome()))
   // Folds keyed by the stored log's own change token, hydrated once here so a
   // restarted process draws the year without re-reading a log it already folded.
-  const folds = createFoldCache(foldCacheFilePath(resolveDshHome()))
+  const folds = createFoldCache(
+    foldCacheFilePath(resolveDshHome()),
+    message => { ctx.logger.warn(message) },
+  )
   // One read's state, published to the panel through its own route. Reads are
   // serialized below, so one object is the whole truth about what is running.
   const progress = createProgressTracker()

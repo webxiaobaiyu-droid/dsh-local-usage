@@ -273,6 +273,18 @@ export const wave = String.raw`/* ── The range's wave ───────�
   inline-size: 12%;
 }
 
+/* The second line of a figure cell says what the figure means rather than
+ * repeating another one: the share of the prompt served from cache, and the cost
+ * of one million tokens. Two rows of the same model can differ thirtyfold on
+ * these alone, which is exactly the question a cost column cannot answer. */
+.dlu-statsNote {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .dlu-tableBlock {
   display: flex;
   flex-direction: column;

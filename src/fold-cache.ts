@@ -12,15 +12,20 @@
  * size and nanosecond timestamps. A stored fold whose revision still matches is
  * therefore a fold of exactly the bytes on disk — no re-read, no guessing.
  *
- * A revision that no longer matches, or a session the backend does not list, is
- * simply a miss: the fold is recomputed and the entry replaced. Nothing here can
- * make a figure wrong; the worst a stale or damaged file can do is cost the cold
- * read it was written to avoid.
+ * A revision that no longer matches is simply a miss: the fold is recomputed and
+ * the entry replaced. But a session the backend does not list is *not* a miss —
+ * its log may have been deleted while the spend it recorded still happened and
+ * was billed. The cache therefore doubles as the per-session ledger the report
+ * reads when a log is gone (`all()`); only the retention horizon removes an
+ * entry. A stale or damaged fold can still only cost this plugin its own answer,
+ * never the logs it was folded from.
  *
  * The file lives beside the pricing overrides under the harness home, is written
- * through a temporary sibling and a rename, and is dropped whole when its
- * document version does not match — a bump has to bring a migration with it, the
- * way every other stored shape in this product does.
+ * through a temporary sibling and a rename, and reads an older document version
+ * rather than dropping it when the entry fields are still the ones this build
+ * understands. A version that cannot be read is dropped with a warning, and a
+ * future shape has to bring a migration with it, the way every other stored
+ * shape in this product does.
  *
  * @module dsh-local-usage/fold-cache
  */
@@ -84,6 +89,18 @@ interface StoredFold extends CachedFold {
 
 /** The persisted fold cache, kept in memory and mirrored to disk. */
 export interface FoldCache {
+  /**
+   * Every fold the cache still holds, including sessions the backend no longer
+   * lists.
+   *
+   * A session's log can disappear — deleted by a plugin, removed by hand, or
+   * dropped by a retention policy — while its spend already happened and was
+   * billed. The fold is the only surviving record of it, so the report reads this
+   * as a ledger as well as a cache: an entry whose log is gone still contributes
+   * its samples, and only the retention horizon removes it.
+   * @returns the session id and fold of every retained entry.
+   */
+  all(): IterableIterator<[string, CachedFold]>
   /**
    * The fold stored for one session, when it was folded from exactly this revision.
    * @param sessionId - durable session id.
@@ -271,7 +288,7 @@ function lastActivity(entry: StoredFold): number | undefined {
  * @param path - absolute path of the cache file.
  * @returns the cache.
  */
-export function createFoldCache(path: string): FoldCache {
+export function createFoldCache(path: string, warn?: (message: string) => void): FoldCache {
   const entries = new Map<string, StoredFold>()
   // The instant this document last dropped entries before. A request reaching
   // further back is answered from a fresh read rather than from a cache that may
@@ -327,19 +344,26 @@ export function createFoldCache(path: string): FoldCache {
       prunedBefore?: unknown
       sessions?: unknown
     }
-    if (document.version === DOCUMENT_VERSION
+    // Version 1 predates per-settlement turn/step/timing, but its entries carry
+    // the same fields this build reads; the missing timing is optional, so a v1
+    // document is read rather than dropped. Dropping it would erase sessions whose
+    // logs are already gone — the one loss this cache exists to prevent.
+    if ((document.version === DOCUMENT_VERSION || document.version === 1)
       && typeof document.sessions === 'object' && document.sessions !== null) {
       for (const [sessionId, candidate] of Object.entries(document.sessions as Record<string, unknown>)) {
         const stored = readStored(candidate)
         if (sessionId.length > 0 && stored !== undefined) entries.set(sessionId, stored)
       }
       prunedBefore = readCount(document.prunedBefore) ?? 0
+    } else if (typeof document.version === 'number' && document.version > DOCUMENT_VERSION) {
+      warn?.(`dsh-local-usage: fold cache version ${String(document.version)} is newer than this build; starting empty`)
     }
   } catch {
     // No cache yet, or one this build cannot read: start empty.
   }
 
   return {
+    all: () => entries.entries(),
     read: (sessionId, revision, from) => {
       if (from !== undefined && from < prunedBefore) return undefined
       const entry = entries.get(sessionId)

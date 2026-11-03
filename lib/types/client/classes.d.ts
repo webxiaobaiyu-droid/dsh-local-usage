@@ -160,6 +160,7 @@ export declare const css: {
     readonly statsColCount: "dlu-statsColCount";
     readonly statsColName: "dlu-statsColName";
     readonly statsColTokens: "dlu-statsColTokens";
+    readonly statsNote: "dlu-statsNote";
     readonly statsTable: "dlu-statsTable";
     readonly tableBlock: "dlu-tableBlock";
     readonly tableHeading: "dlu-tableHeading";

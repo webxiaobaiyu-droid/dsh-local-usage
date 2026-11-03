@@ -45,6 +45,10 @@ interface StatsRow {
   /** Whether this row was billed at the fallback rate. */
   readonly unpriced?: boolean
   readonly figures: UsageCosted
+  /** Share of prompt tokens served from cache, when the row billed any prompt. */
+  readonly cacheRate?: number
+  /** Cost of one million of the row's tokens, when it billed any. */
+  readonly unitCost?: number
   /** Extra count in the last column: calls for a route, sessions for a directory. */
   readonly count: number
 }
@@ -56,6 +60,7 @@ export interface StatsTablesProps {
   readonly t: PropsLocale<'usage'>['t']
   readonly formatCost: (value: number) => string
   readonly formatInteger: (value: number) => string
+  readonly formatPercent: (value: number) => string
 }
 
 /**
@@ -63,12 +68,25 @@ export interface StatsTablesProps {
  * @param props - the report and the formatters.
  * @returns the two tables.
  */
-export function StatsTables({ report, t, formatCost, formatInteger }: StatsTablesProps): ReactNode {
+export function StatsTables({ report, t, formatCost, formatInteger, formatPercent }: StatsTablesProps): ReactNode {
+  // The two derived figures a row can carry: how much of its prompt was served
+  // from cache, and what one million of its tokens cost. They are what makes two
+  // rows of the same model — one almost entirely cache reads, one almost entirely
+  // uncached input — read as different without either being mispriced.
+  const derived = (figures: UsageCosted): { cacheRate?: number; unitCost?: number } => {
+    const prompt = figures.uncachedInputTokens + figures.cacheReadTokens
+    const tokens = tokensOf(figures)
+    return {
+      ...prompt > 0 ? { cacheRate: figures.cacheReadTokens / prompt } : {},
+      ...tokens > 0 ? { unitCost: figures.cost / tokens * 1_000_000 } : {},
+    }
+  }
   const models: StatsRow[] = report.models.slice(0, ROWS).map(row => ({
     key: row.route,
     name: row.route,
     unpriced: !row.priced,
     figures: row,
+    ...derived(row),
     count: row.calls,
   }))
   const projects: StatsRow[] = report.projects.slice(0, ROWS).map(row => {
@@ -80,6 +98,7 @@ export function StatsTables({ report, t, formatCost, formatInteger }: StatsTable
       name: name ?? t('projectUnknown'),
       ...name === undefined ? {} : { detail: row.path },
       figures: row,
+      ...derived(row),
       count: row.sessions,
     }
   })
@@ -95,6 +114,7 @@ export function StatsTables({ report, t, formatCost, formatInteger }: StatsTable
         t={t}
         formatCost={formatCost}
         formatInteger={formatInteger}
+        formatPercent={formatPercent}
       />
       <StatsTable
         heading={t('statsByProject')}
@@ -105,13 +125,14 @@ export function StatsTables({ report, t, formatCost, formatInteger }: StatsTable
         t={t}
         formatCost={formatCost}
         formatInteger={formatInteger}
+        formatPercent={formatPercent}
       />
     </div>
   )
 }
 
 /** One of the two tables: a heading, four columns, and what it left out. */
-function StatsTable({ heading, nameColumn, countColumn, rows, total, t, formatCost, formatInteger }: {
+function StatsTable({ heading, nameColumn, countColumn, rows, total, t, formatCost, formatInteger, formatPercent }: {
   readonly heading: string
   readonly nameColumn: string
   readonly countColumn: string
@@ -121,6 +142,7 @@ function StatsTable({ heading, nameColumn, countColumn, rows, total, t, formatCo
   readonly t: PropsLocale<'usage'>['t']
   readonly formatCost: (value: number) => string
   readonly formatInteger: (value: number) => string
+  readonly formatPercent: (value: number) => string
 }): ReactNode {
   return (
     <section className={css.tableBlock}>
@@ -158,8 +180,18 @@ function StatsTable({ heading, nameColumn, countColumn, rows, total, t, formatCo
                       ? <span className={css.unpricedBadge}>{t('pricingFallback')}</span>
                       : null}
                   </th>
-                  <td className={css.numeric}>{formatInteger(tokensOf(row.figures))}</td>
-                  <td className={css.numeric}>{formatCost(row.figures.cost)}</td>
+                  <td className={css.numeric}>
+                    {formatInteger(tokensOf(row.figures))}
+                    {row.cacheRate === undefined
+                      ? null
+                      : <span className={css.statsNote}>{t('statsCacheRate', { percent: formatPercent(row.cacheRate) })}</span>}
+                  </td>
+                  <td className={css.numeric}>
+                    {formatCost(row.figures.cost)}
+                    {row.unitCost === undefined
+                      ? null
+                      : <span className={css.statsNote}>{t('statsUnitCost', { cost: formatCost(row.unitCost) })}</span>}
+                  </td>
                   <td className={css.numeric}>{formatInteger(row.count)}</td>
                 </tr>
               ))}

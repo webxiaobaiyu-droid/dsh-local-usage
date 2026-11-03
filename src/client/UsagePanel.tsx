@@ -569,6 +569,7 @@ export function UsagePanel({ panelId, locale, report, saveRates, t, usePanelInfo
                     t={t}
                     formatCost={money}
                     formatInteger={integer}
+                    formatPercent={percent}
                   />
                 ) : null}
 

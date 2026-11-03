@@ -28,6 +28,7 @@ function emptyReport(): UsageInsightsReport {
   return {
     generatedAt: 1,
     currency: 'CNY',
+    restoredSessions: 0,
     totals: {
       uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
       cost: 0, calls: 0, sessions: 0,

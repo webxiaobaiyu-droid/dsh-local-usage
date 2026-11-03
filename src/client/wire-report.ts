@@ -44,6 +44,9 @@ export function normalizeReport(value: WireReport): UsageInsightsReport {
     sessions: value.sessions ?? [],
     scannedSessions: value.scannedSessions ?? 0,
     unreadableSessions: value.unreadableSessions ?? 0,
+    // An older Host does not know its cache outlives a deleted log; zero is the
+    // honest default there, because none of its figures came from that path.
+    restoredSessions: value.restoredSessions ?? 0,
     // A Host of another build may not fold reliability at all; a window that
     // states nothing is the truth about what this Client can see, and the
     // panel's block stays away rather than claiming a spotless record.

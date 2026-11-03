@@ -432,6 +432,39 @@ describe('assembleReport: the durable fold cache', () => {
     expect(value.totals).toMatchObject({ calls: 2 })
   })
 
+  it('keeps a deleted session’s spend from the fold it left behind', async () => {
+    const logs = new Map<string, FakeLog>([
+      ['a', { events: log(0, RECENT, 2) }],
+      ['gone', { events: log(0, RECENT, 3) }],
+    ])
+    await report(mount(logs, true, { revisions: { a: 'rev-1', gone: 'rev-1' } }))
+
+    // The next process lists only 'a': 'gone' had its log deleted. Its fold is
+    // still in the cache, and the spend it recorded still happened.
+    const surviving = new Map<string, FakeLog>([['a', { events: log(0, RECENT, 2) }]])
+    const second = mount(surviving, true, { revisions: { a: 'rev-1' } })
+    const value = await report(second)
+
+    expect(value.totals).toMatchObject({ calls: 5, uncachedInputTokens: 500 })
+    expect(value.scannedSessions).toBe(2)
+    expect(value.restoredSessions).toBe(1)
+  })
+
+  it('leaves a deleted session outside the requested window out of the read', async () => {
+    const logs = new Map<string, FakeLog>([
+      ['a', { events: log(0, RECENT, 2) }],
+      ['gone', { events: log(0, RECENT - 3 * MS_PER_DAY, 3) }],
+    ])
+    await report(mount(logs, true, { revisions: { a: 'rev-1', gone: 'rev-1' } }))
+
+    const surviving = new Map<string, FakeLog>([['a', { events: log(0, RECENT, 2) }]])
+    const second = mount(surviving, true, { revisions: { a: 'rev-1' } })
+    const value = await report(second, { from: RECENT, to: RECENT + MS_PER_DAY })
+
+    expect(value.totals).toMatchObject({ calls: 2 })
+    expect(value.restoredSessions).toBe(0)
+  })
+
   it('stores nothing for a live session, whose events are only in memory', async () => {
     const logs = new Map<string, FakeLog>([['a', { events: log(0, RECENT, 2) }]])
 

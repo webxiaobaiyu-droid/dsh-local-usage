@@ -47,6 +47,7 @@ describe('normalizeReport', () => {
     expect(report.unpricedTokens).toBe(0)
     expect(report.scannedSessions).toBe(0)
     expect(report.unreadableSessions).toBe(0)
+    expect(report.restoredSessions).toBe(0)
     expect(report.cached).toBe(false)
   })
 

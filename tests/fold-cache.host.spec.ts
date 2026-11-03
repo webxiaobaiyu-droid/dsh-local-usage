@@ -119,6 +119,44 @@ describe('createFoldCache', () => {
     expect(reopened.read('s1', 'rev-1', horizon - MS_PER_DAY)).toBeUndefined()
   })
 
+  it('lists every retained entry, including one the backend no longer lists', async () => {
+    const path = await cachePath()
+    const now = Date.now()
+    const cache = createFoldCache(path)
+    cache.write('still-listed', 'rev-1', fold(now - MS_PER_DAY))
+    cache.write('deleted', 'rev-1', fold(now - 2 * MS_PER_DAY))
+    await cache.flush(now)
+
+    const reopened = createFoldCache(path)
+    const ids = [...reopened.all()].map(([id]) => id).sort()
+    expect(ids).toEqual(['deleted', 'still-listed'])
+  })
+
+  it('reads a version-1 document instead of discarding the sessions only it remembers', async () => {
+    const path = await cachePath()
+    const time = Date.now() - MS_PER_DAY
+    const stored = {
+      version: 1,
+      prunedBefore: 0,
+      sessions: {
+        old: {
+          revision: 'rev-1',
+          createdAt: time - 1000,
+          samples: [{ time, route: 'p/m', tokens: { uncachedInputTokens: 10, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 } }],
+          reliability: [],
+        },
+      },
+    }
+    await writeFile(path, JSON.stringify(stored), 'utf8')
+
+    const cache = createFoldCache(path)
+    const fold = cache.read('old', 'rev-1', undefined)
+    expect(fold?.samples).toHaveLength(1)
+    expect(fold?.samples[0]?.tokens.uncachedInputTokens).toBe(10)
+    // Version 1 had no per-call timing; the missing fields stay absent.
+    expect(fold?.samples[0]?.firstTokenMs).toBeUndefined()
+  })
+
   it('drops an entry no window can reach any more', async () => {
     const path = await cachePath()
     const now = Date.now()

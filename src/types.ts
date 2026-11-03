@@ -460,6 +460,14 @@ export interface UsageInsightsReport {
   readonly scannedSessions: number
   /** Session logs that could not be read; their usage is missing from every total. */
   readonly unreadableSessions: number
+  /**
+   * Sessions whose logs are no longer on disk.
+   *
+   * Their figures come from the durable per-session fold rather than from a log:
+   * the spend happened and was billed, so deleting the log does not delete it
+   * from the report. Zero when every contributing session is still listed.
+   */
+  readonly restoredSessions: number
   /** What the window spent its attempts on: retries, tool errors, failed compactions. */
   readonly reliability: UsageReliability
   /** Routes that matched no price rule and fell back to the default rate. */

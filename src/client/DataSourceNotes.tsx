@@ -64,6 +64,13 @@ export function DataSourceNotes({ report, weeks, locale, t }: DataSourceNotesPro
         <Fact label={t('dataWindowLabel')}>
           {t('dataWindowValue', { weeks: String(weeks), days: String(weeks * 7) })}
         </Fact>
+        {report.restoredSessions > 0
+          ? (
+            <Fact label={t('dataRestoredLabel')}>
+              {t('dataRestoredValue', { count: formatInteger(report.restoredSessions, locale) })}
+            </Fact>
+          )
+          : null}
         <Fact label={t('dataExcludedLabel')}>{t('dataExcludedValue')}</Fact>
         <Fact label={t('dataFlowLabel')}>{t('dataFlow')}</Fact>
       </dl>

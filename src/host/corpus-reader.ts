@@ -166,6 +166,11 @@ export interface CorpusRead {
   readonly contributors: readonly Contributor[]
   /** Sessions whose logs could not be read. */
   readonly unreadable: number
+  /**
+   * Sessions counted from the fold cache because the backend no longer lists
+   * them — their logs are gone, but their spend is not.
+   */
+  readonly restoredIds: readonly string[]
   /** Whether every fold came from the caches rather than a fresh read. */
   readonly cached: boolean
 }
@@ -221,6 +226,30 @@ export async function readCorpus(
       continue
     }
     needy.push({ id: id as SessionId, seeded: record.header.isSeeded, live: record.live })
+  }
+
+  // A log that is gone is not a log that never spent. The durable cache keeps
+  // every fold it ever wrote; a session the backend no longer lists — deleted by
+  // a plugin, removed by hand, or archived out of the listing — still
+  // contributes the samples it was billed for. This costs no read: the samples
+  // are already in the document. Only the retention horizon removes them.
+  const listed = new Set(records.map(record => String(record.header.id)))
+  const restoredIds: string[] = []
+  for (const [id, fold] of folds.all()) {
+    if (listed.has(id)) continue
+    // The same window test `sessionInputOf` applies below: a deleted session from
+    // last month is not a contributor to a report about today, and counting it as
+    // one would inflate the read's session count.
+    const inWindow = request.from === undefined && request.to === undefined
+      || fold.samples.some(sample =>
+        (request.from === undefined || sample.time >= request.from)
+        && (request.to === undefined || sample.time <= request.to))
+    if (!inWindow) continue
+    // Deliberately not put in the in-memory cache: a log that reappears with new
+    // events must go through the revision check, and this fold has no live event
+    // stream to invalidate it.
+    contributors.push({ id, fold })
+    restoredIds.push(id)
   }
 
   // Revisions turn the durable cache into a lookup: the same token means the
@@ -343,7 +372,7 @@ export async function readCorpus(
     ctx.logger.warn(`dsh-local-usage: fold cache write failed: ${describe(error)}`)
   }
 
-  return { contributors, unreadable, cached }
+  return { contributors, unreadable, restoredIds, cached }
 }
 
 

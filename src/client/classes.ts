@@ -165,6 +165,7 @@ export const css = {
   statsColCount: 'dlu-statsColCount',
   statsColName: 'dlu-statsColName',
   statsColTokens: 'dlu-statsColTokens',
+  statsNote: 'dlu-statsNote',
   statsTable: 'dlu-statsTable',
   tableBlock: 'dlu-tableBlock',
   tableHeading: 'dlu-tableHeading',

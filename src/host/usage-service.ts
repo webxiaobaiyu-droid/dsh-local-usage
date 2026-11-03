@@ -56,9 +56,15 @@ export async function assembleReport(
     // Every contributor in the requested window: the one place a window becomes
     // the inputs a fold prices.
     const inputs = corpus.contributors.map(({ id, fold }) => sessionInputOf(id, fold, request))
+    // Only the restored sessions with a sample in this window: a deleted session
+    // from last year is in the fold but not in a report about today, and counting
+    // it here would claim a contribution the figures do not show.
+    const restored = new Set(corpus.restoredIds)
+    const restoredSessions = inputs.filter(input => restored.has(input.sessionId) && input.samples.length > 0).length
     return buildReport(inputs, pricingOptions(config, rates), {
       generatedAt: Date.now(),
       unreadableSessions: corpus.unreadable,
+      restoredSessions,
       cached: corpus.cached,
     })
   } finally {

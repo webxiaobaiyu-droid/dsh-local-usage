@@ -93,6 +93,8 @@ export interface ReportMeta {
   readonly unreadableSessions: number
   /** Whether the samples came from the Host's in-memory fold cache. */
   readonly cached: boolean
+  /** Sessions whose log is gone and whose figures come from the durable fold. */
+  readonly restoredSessions: number
 }
 
 /**
@@ -683,6 +685,7 @@ export function buildReport(
     sessions: sessionRows,
     scannedSessions: inputs.length,
     unreadableSessions: meta.unreadableSessions,
+    restoredSessions: meta.restoredSessions,
     reliability: reliabilityOfWindow(inputs),
     unpricedRoutes: [...unpricedRoutes].sort(),
     unpricedTokens,

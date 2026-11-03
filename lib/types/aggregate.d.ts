@@ -65,6 +65,8 @@ export interface ReportMeta {
     readonly unreadableSessions: number;
     /** Whether the samples came from the Host's in-memory fold cache. */
     readonly cached: boolean;
+    /** Sessions whose log is gone and whose figures come from the durable fold. */
+    readonly restoredSessions: number;
 }
 /**
  * Local calendar day of one instant, as `YYYY-MM-DD`.

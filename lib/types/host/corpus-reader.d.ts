@@ -20,6 +20,11 @@ export interface CorpusRead {
     readonly contributors: readonly Contributor[];
     /** Sessions whose logs could not be read. */
     readonly unreadable: number;
+    /**
+     * Sessions counted from the fold cache because the backend no longer lists
+     * them — their logs are gone, but their spend is not.
+     */
+    readonly restoredIds: readonly string[];
     /** Whether every fold came from the caches rather than a fresh read. */
     readonly cached: boolean;
 }

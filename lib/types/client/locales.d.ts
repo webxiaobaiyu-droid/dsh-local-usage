@@ -53,6 +53,8 @@ export declare const zh: {
     statsByModel: string;
     statsByProject: string;
     statsMore: string;
+    statsCacheRate: string;
+    statsUnitCost: string;
     calendarHint: string;
     calendarWindow: string;
     calendarRangeSelected: string;
@@ -134,6 +136,8 @@ export declare const zh: {
     dataScopeValue: string;
     dataWindowLabel: string;
     dataWindowValue: string;
+    dataRestoredLabel: string;
+    dataRestoredValue: string;
     dataExcludedLabel: string;
     dataExcludedValue: string;
     dataFlowLabel: string;
@@ -233,6 +237,8 @@ export declare const en: {
     statsByModel: string;
     statsByProject: string;
     statsMore: string;
+    statsCacheRate: string;
+    statsUnitCost: string;
     calendarHint: string;
     calendarWindow: string;
     calendarRangeSelected: string;
@@ -314,6 +320,8 @@ export declare const en: {
     dataScopeValue: string;
     dataWindowLabel: string;
     dataWindowValue: string;
+    dataRestoredLabel: string;
+    dataRestoredValue: string;
     dataExcludedLabel: string;
     dataExcludedValue: string;
     dataFlowLabel: string;

@@ -31,6 +31,7 @@ const OPTIONS: PricingOptions = {
 const META: ReportMeta = {
   generatedAt: 1_700_000_000_000,
   unreadableSessions: 0,
+  restoredSessions: 0,
   cached: false,
 }
 

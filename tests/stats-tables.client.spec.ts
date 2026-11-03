@@ -55,6 +55,7 @@ const base = {
   t: t as unknown as StatsTablesProps['t'],
   formatCost: (value: number) => `CNY ${value.toFixed(2)}`,
   formatInteger: String,
+  formatPercent: (value: number) => `${(value * 100).toFixed(1)}%`,
 }
 
 describe('StatsTables', () => {

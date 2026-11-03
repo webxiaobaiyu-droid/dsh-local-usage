@@ -26,10 +26,11 @@ export interface StatsTablesProps {
     readonly t: PropsLocale<'usage'>['t'];
     readonly formatCost: (value: number) => string;
     readonly formatInteger: (value: number) => string;
+    readonly formatPercent: (value: number) => string;
 }
 /**
  * Render the window's spend by model and by project.
  * @param props - the report and the formatters.
  * @returns the two tables.
  */
-export declare function StatsTables({ report, t, formatCost, formatInteger }: StatsTablesProps): ReactNode;
+export declare function StatsTables({ report, t, formatCost, formatInteger, formatPercent }: StatsTablesProps): ReactNode;
